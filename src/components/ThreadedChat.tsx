@@ -264,41 +264,41 @@ export default function ThreadedChat() {
 
     return (
       <div 
-        className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-2 min-w-[220px]"
+        className="fixed z-50 bg-card/95 backdrop-blur-sm border border-custom rounded-lg shadow-xl py-2 min-w-[220px]"
         style={{ left: contextMenuPosition.x - 110, top: contextMenuPosition.y }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100">
+        <div className="px-3 py-2 text-xs text-muted border-b border-custom">
           Create new thread from selection
         </div>
         <button
           onClick={() => createNewThread(selectedText, false)}
-          className="w-full px-4 py-2 text-left hover:bg-gray-100 text-sm text-black font-medium"
+          className="w-full px-4 py-2 text-left hover:bg-hover text-sm text-white font-medium transition-colors duration-200"
         >
           💬 Ask about this
         </button>
         <button
           onClick={() => createNewThread(selectedText, true)}
-          className="w-full px-4 py-2 text-left hover:bg-gray-100 text-sm text-black font-medium"
+          className="w-full px-4 py-2 text-left hover:bg-hover text-sm text-white font-medium transition-colors duration-200"
         >
           🔍 Get more details
         </button>
         <button
           onClick={() => createNewThread(`Please explain this in the simplest terms possible, as if you're teaching it to someone who is completely new to the topic: "${selectedText}"`, false, true)}
-          className="w-full px-4 py-2 text-left hover:bg-gray-100 text-sm text-black font-medium"
+          className="w-full px-4 py-2 text-left hover:bg-hover text-sm text-white font-medium transition-colors duration-200"
         >
           🎯 Simplify this
         </button>
         <button
           onClick={() => createNewThread(`Please provide 3-5 concrete, practical examples that illustrate or relate to: "${selectedText}". Make the examples diverse and easy to understand.`, false, true)}
-          className="w-full px-4 py-2 text-left hover:bg-gray-100 text-sm text-black font-medium"
+          className="w-full px-4 py-2 text-left hover:bg-hover text-sm text-white font-medium transition-colors duration-200"
         >
           📝 Give examples
         </button>
-        <div className="border-t border-gray-100 mt-1 pt-1">
+        <div className="border-t border-custom mt-1 pt-1">
           <button
             onClick={() => setShowContextMenu(false)}
-            className="w-full px-4 py-2 text-left hover:bg-gray-100 text-sm text-gray-600 font-medium"
+            className="w-full px-4 py-2 text-left hover:bg-hover text-sm text-muted font-medium transition-colors duration-200"
           >
             Cancel
           </button>
@@ -308,37 +308,28 @@ export default function ThreadedChat() {
   };
 
   const ModelSelector = () => (
-    <div className="flex space-x-2 mb-4">
-      <button
-        onClick={() => setSelectedModel('openai')}
-        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-          selectedModel === 'openai'
-            ? 'bg-red-500 text-white'
-            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-        }`}
-      >
-        GPT-4
-      </button>
-      <button
-        onClick={() => setSelectedModel('claude')}
-        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-          selectedModel === 'claude'
-            ? 'bg-red-500 text-white'
-            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-        }`}
-      >
-        Claude 4 Opus
-      </button>
-      <button
-        onClick={() => setSelectedModel('anthropic')}
-        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-          selectedModel === 'anthropic'
-            ? 'bg-red-500 text-white'
-            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-        }`}
-      >
-        Claude 3.5 Sonnet
-      </button>
+    <div className="flex flex-wrap gap-2">
+      {[
+        { value: 'openai' as ModelProvider, label: 'GPT-4', emoji: '🧠', color: 'green' },
+        { value: 'claude' as ModelProvider, label: 'Claude 4 Opus', emoji: '🤖', color: 'blue' },
+        { value: 'anthropic' as ModelProvider, label: 'Claude 3.5 Sonnet', emoji: '🎯', color: 'purple' }
+      ].map((model) => (
+        <button
+          key={model.value}
+          onClick={() => setSelectedModel(model.value)}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 border backdrop-blur-sm ${
+            selectedModel === model.value
+              ? model.color === 'green' 
+                ? 'bg-accent-green/20 text-accent-green border-accent-green/50 shadow-lg' 
+                : model.color === 'blue'
+                ? 'bg-accent-blue/20 text-accent-blue border-accent-blue/50 shadow-lg'
+                : 'bg-accent-purple/20 text-accent-purple border-accent-purple/50 shadow-lg'
+              : 'bg-card/60 text-muted hover:bg-hover hover:text-white border-custom'
+          }`}
+        >
+          {model.emoji} {model.label}
+        </button>
+      ))}
     </div>
   );
 
@@ -350,7 +341,7 @@ export default function ThreadedChat() {
           onChange={handleInputChange}
           placeholder={isThread ? "Ask about the selected context..." : "Type your message..."}
           disabled={isLoading}
-          className="flex-1 p-4 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-900 placeholder-gray-500"
+          className="flex-1 p-4 border border-custom bg-white/90 backdrop-blur-sm rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue/50 disabled:bg-gray-200 disabled:cursor-not-allowed text-black placeholder-gray-500 transition-all duration-200"
           rows={1}
           style={{ minHeight: '56px', maxHeight: '120px' }}
           onKeyDown={(e: any) => {
@@ -365,9 +356,19 @@ export default function ThreadedChat() {
         <button
           type="submit"
           disabled={isLoading || !input.trim()}
-          className="bg-red-500 text-white px-6 py-4 rounded-lg font-medium hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+          className="bg-accent-blue text-white px-6 py-4 rounded-lg font-medium hover:bg-accent-blue/80 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all duration-200 shadow-lg"
         >
-          {isLoading ? '...' : 'Chat'}
+          {isLoading ? (
+            <div className="flex items-center space-x-1">
+              <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
+              <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+              <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+            </div>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+          )}
         </button>
       </div>
     </form>
@@ -377,18 +378,23 @@ export default function ThreadedChat() {
     const isUser = message.role === 'user';
     
     return (
-      <div className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}>
+      <div className={`flex ${isUser ? 'justify-start' : 'justify-end'} slide-in`}>
         <div
-          className={`max-w-full px-4 py-3 rounded-lg border-2 border-black ${
+          className={`max-w-4xl px-4 py-3 rounded-lg border transition-all duration-200 ${
             isUser
-              ? 'bg-blue-500 text-white'
-              : 'bg-white text-gray-800 cursor-text select-text'
+              ? 'bg-accent-blue/20 text-white border-accent-blue/30 backdrop-blur-sm'
+              : 'bg-card/80 text-white cursor-text select-text border-custom hover:bg-card/90 backdrop-blur-sm'
           }`}
           onMouseUp={() => !isUser && handleTextSelection(message.id, isThread, threadId)}
         >
           <div className="whitespace-pre-wrap text-sm leading-relaxed">
             {message.content}
           </div>
+          {!isUser && (
+            <div className="mt-2 text-xs text-muted opacity-60">
+              Select text to create a new thread
+            </div>
+          )}
         </div>
       </div>
     );
@@ -469,29 +475,29 @@ export default function ThreadedChat() {
           : 'flex-1'; // Equal share in balanced view
     
     return (
-      <div className={`${threadPanelWidth} bg-white border-l border-gray-200 flex flex-col h-full transition-all duration-300 ${isCollapsed || isMainExpanded ? 'min-w-80' : ''}`}>
+      <div className={`${threadPanelWidth} bg-card/60 backdrop-blur border-l-2 border-accent-blue/40 border-r border-custom shadow-lg flex flex-col h-full transition-all duration-300 ${isCollapsed || isMainExpanded ? 'min-w-80' : ''} slide-in mx-1`}>
         {/* Thread Header */}
-        <div className="p-4 border-b bg-gray-50">
+        <div className="p-4 border-b-2 border-accent-blue/30 bg-card/80 backdrop-blur-sm shadow-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-gray-800 text-sm">Thread</h3>
-              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+              <h3 className="font-semibold text-white text-sm">Thread</h3>
+              <span className="text-xs bg-accent-blue/20 text-accent-blue px-2 py-1 rounded-full border border-accent-blue/30">
                 #{threads.findIndex(t => t.id === thread.id) + 1}
               </span>
               {thread.rowId !== undefined && thread.rowId > 0 && (
-                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                <span className="text-xs bg-accent-purple/20 text-accent-purple px-2 py-1 rounded-full border border-accent-purple/30">
                   Row {thread.rowId + 1}
                 </span>
               )}
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-muted">
                 ID: {thread.id.split('-').pop()}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => toggleThreadExpansion(thread.id)}
-                className={`p-1 rounded hover:bg-gray-200 transition-colors ${
-                  isExpanded ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'
+                className={`p-1 rounded-lg hover:bg-hover transition-colors ${
+                  isExpanded ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
                 }`}
                 title={isExpanded ? 'Collapse thread' : 'Expand thread'}
               >
@@ -499,27 +505,27 @@ export default function ThreadedChat() {
               </button>
               <button
                 onClick={() => closeThread(thread.id)}
-                className="text-gray-400 hover:text-gray-600 text-lg"
+                className="text-gray-400 hover:text-accent-red text-lg transition-colors"
               >
                 ×
               </button>
             </div>
           </div>
           {thread.selectedContext && (
-            <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
-              <div className="flex items-center justify-between mb-1">
-                <div className="font-medium text-yellow-800">Context:</div>
+            <div className="mt-2 p-3 bg-accent-yellow/10 border border-accent-yellow/20 rounded-lg text-xs backdrop-blur-sm">
+              <div className="flex items-center justify-between mb-2">
+                <div className="font-medium text-accent-yellow">Context:</div>
                 <div className="relative">
                   <button
                     onClick={() => setShowRerunMenu(showRerunMenu === thread.id ? null : thread.id)}
-                    className="text-yellow-600 hover:text-yellow-800 text-xs px-2 py-1 bg-yellow-100 hover:bg-yellow-200 rounded transition-colors flex items-center gap-1"
+                    className="text-accent-yellow hover:text-accent-yellow/80 text-xs px-2 py-1 bg-accent-yellow/20 hover:bg-accent-yellow/30 rounded-lg transition-colors flex items-center gap-1 border border-accent-yellow/30"
                     title="Re-run this context"
                   >
                     🔄 Re-run <span className="text-xs">▼</span>
                   </button>
                   {showRerunMenu === thread.id && (
                     <div 
-                      className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px] z-50"
+                      className="absolute right-0 top-full mt-1 bg-card/90 backdrop-blur border border-custom rounded-lg shadow-xl py-1 min-w-[180px] z-50"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <button
@@ -527,7 +533,7 @@ export default function ThreadedChat() {
                           handleContextRerun('original');
                           setShowRerunMenu(null);
                         }}
-                        className="w-full px-3 py-2 text-left hover:bg-gray-100 text-xs text-gray-700"
+                        className="w-full px-3 py-2 text-left hover:bg-hover text-xs text-white transition-colors"
                       >
                         🔄 Re-run original
                       </button>
@@ -536,7 +542,7 @@ export default function ThreadedChat() {
                           handleContextRerun('different');
                           setShowRerunMenu(null);
                         }}
-                        className="w-full px-3 py-2 text-left hover:bg-gray-100 text-xs text-gray-700"
+                        className="w-full px-3 py-2 text-left hover:bg-hover text-xs text-white transition-colors"
                       >
                         🔀 Different perspective
                       </button>
@@ -545,7 +551,7 @@ export default function ThreadedChat() {
                           handleContextRerun('simplified');
                           setShowRerunMenu(null);
                         }}
-                        className="w-full px-3 py-2 text-left hover:bg-gray-100 text-xs text-gray-700"
+                        className="w-full px-3 py-2 text-left hover:bg-hover text-xs text-white transition-colors"
                       >
                         🎯 Simplified version
                       </button>
@@ -553,18 +559,18 @@ export default function ThreadedChat() {
                   )}
                 </div>
               </div>
-              <div className="text-yellow-700 italic">"{thread.selectedContext}"</div>
+              <div className="text-accent-yellow/90 italic">"{thread.selectedContext}"</div>
             </div>
           )}
         </div>
 
         {/* Thread Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gradient-to-b from-transparent to-slate-900/10">
           {threadChat.messages.length === 0 && (
-            <div className="text-center text-gray-500 text-sm py-8">
+            <div className="text-center text-muted text-sm py-8">
               <div className="mb-2">💭</div>
-              <div>Ask a question about the selected context above</div>
-              <div className="text-xs text-green-600 mt-2 bg-green-50 px-2 py-1 rounded">
+              <div className="text-white">Ask a question about the selected context above</div>
+              <div className="text-xs text-accent-green mt-3 bg-accent-green/10 px-3 py-2 rounded-lg border border-accent-green/20">
                 ✓ Context will be automatically included with your questions
               </div>
             </div>
@@ -574,24 +580,24 @@ export default function ThreadedChat() {
           ))}
           {threadChat.isLoading && (
             <div className="flex justify-start">
-              <div className="bg-gray-200 p-3 rounded-lg">
+              <div className="bg-card/80 backdrop-blur-sm p-3 rounded-lg border border-custom">
                 <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <div className="w-2 h-2 bg-accent-blue rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-accent-blue rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                  <div className="w-2 h-2 bg-accent-blue rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                 </div>
               </div>
             </div>
           )}
           {threadChat.messages.length > 0 && (
-            <div className="text-xs text-gray-400 text-center py-2 border-t border-gray-100 mt-4">
+            <div className="text-xs text-muted text-center py-2 border-t border-custom mt-4">
               💡 Select any AI response text to create deeper threads
             </div>
           )}
         </div>
 
         {/* Thread Input */}
-        <div className="border-t p-4">
+        <div className="border-t border-custom p-4 bg-card/40 backdrop-blur-sm">
           <ChatInput 
             isThread={true}
             onSubmit={(e: any) => {
@@ -750,44 +756,44 @@ Question: ${threadChat.input}`;
     
     return (
       <div
-        className={`w-1 bg-gray-300 hover:bg-blue-400 cursor-col-resize transition-colors duration-200 relative group ${
-          isResizing ? 'bg-blue-500' : ''
+        className={`w-2 bg-accent-blue/20 hover:bg-accent-blue/40 cursor-col-resize transition-colors duration-200 relative group border-l border-r border-accent-blue/30 ${
+          isResizing ? 'bg-accent-blue/60' : ''
         }`}
         onMouseDown={handleMouseDown}
       >
         {/* Visual indicator */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-0.5 h-8 bg-gray-400 group-hover:bg-blue-500 transition-colors duration-200"></div>
+          <div className="w-0.5 h-12 bg-accent-blue/60 group-hover:bg-accent-blue transition-colors duration-200 rounded-full"></div>
         </div>
         {/* Hover area for easier grabbing */}
-        <div className="absolute -left-1 -right-1 inset-y-0"></div>
+        <div className="absolute -left-2 -right-2 inset-y-0"></div>
       </div>
     );
   };
 
   return (
     <div 
-      className="flex h-screen bg-gray-50" 
+      className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" 
       onClick={() => {
         setShowContextMenu(false);
         setShowRerunMenu(null);
       }}
     >
       {/* Main chat area - dynamic width based on expansion state */}
-      <div className={`${hasActiveThreads ? mainWidth : 'w-full'} flex flex-col transition-all duration-300 ${hasActiveThreads ? '' : 'border-r border-transparent'}`}>
+      <div className={`${hasActiveThreads ? mainWidth : 'w-full'} flex flex-col transition-all duration-300 ${hasActiveThreads ? 'border-r-2 border-accent-blue/30 shadow-lg' : 'border-r border-transparent'}`}>
         {/* Header with model selector */}
-        <div className="border-b bg-white p-4">
+        <div className="border-b border-custom bg-card/80 backdrop-blur-sm p-4">
           <div className={`mx-auto ${expandedThread && expandedThread !== 'main' ? 'max-w-full px-2' : 'max-w-4xl'} transition-all duration-300`}>
             <div className="flex items-center justify-between mb-4">
-              <h1 className={`font-bold text-gray-800 ${expandedThread && expandedThread !== 'main' ? 'text-lg' : 'text-2xl'} transition-all duration-300`}>
+              <h1 className={`font-bold text-white ${expandedThread && expandedThread !== 'main' ? 'text-lg' : 'text-2xl'} transition-all duration-300`}>
                 {expandedThread && expandedThread !== 'main' ? 'Main Chat' : 'AI Chat with Contextual Threading'}
               </h1>
               {hasActiveThreads && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => toggleThreadExpansion('main')}
-                    className={`p-2 rounded hover:bg-gray-200 transition-colors ${
-                      expandedThread === 'main' ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'
+                    className={`p-2 rounded-lg hover:bg-hover transition-colors ${
+                      expandedThread === 'main' ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
                     }`}
                     title={expandedThread === 'main' ? 'Collapse main chat' : 'Expand main chat'}
                   >
@@ -796,7 +802,7 @@ Question: ${threadChat.input}`;
                   {manualMainWidth !== null && (
                     <button
                       onClick={() => setManualMainWidth(null)}
-                      className="p-1 text-xs bg-orange-100 text-orange-600 hover:bg-orange-200 rounded transition-colors"
+                      className="p-1 text-xs bg-accent-orange/20 text-accent-orange hover:bg-accent-orange/30 rounded-lg transition-colors"
                       title="Reset to automatic sizing"
                     >
                       🔄 Reset
@@ -807,25 +813,25 @@ Question: ${threadChat.input}`;
             </div>
             <ModelSelector />
             {hasActiveThreads && (
-              <div className="mt-2 text-sm text-gray-600">
+              <div className="mt-2 text-sm text-muted">
                 💡 Select text in any AI response to create contextual threads - drill deeper into topics!
                 {threadRows.length > 1 && (
-                  <div className="mt-1 text-xs text-purple-600 bg-purple-50 px-2 py-1 rounded">
+                  <div className="mt-1 text-xs text-accent-purple bg-accent-purple/10 px-3 py-2 rounded-lg border border-accent-purple/20">
                     📚 Multi-row layout active - {threadRows.length} rows of threads
                   </div>
                 )}
                 {manualMainWidth !== null && !expandedThread && (
-                  <div className="mt-1 text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
+                  <div className="mt-1 text-xs text-accent-orange bg-accent-orange/10 px-3 py-2 rounded-lg border border-accent-orange/20">
                     📏 Manual width: {Math.round(manualMainWidth)}% main, {100 - Math.round(manualMainWidth)}% threads
                   </div>
                 )}
                 {expandedThread === 'main' && (
-                  <div className="mt-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                  <div className="mt-1 text-xs text-accent-blue bg-accent-blue/10 px-3 py-2 rounded-lg border border-accent-blue/20">
                     🔍 Main chat expanded (75% width) for easier reading
                   </div>
                 )}
                 {expandedThread && expandedThread !== 'main' && (
-                  <div className="mt-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+                  <div className="mt-1 text-xs text-accent-green bg-accent-green/10 px-3 py-2 rounded-lg border border-accent-green/20">
                     🔍 Thread #{threads.findIndex(t => t.id === expandedThread) + 1} expanded - Main chat minimized to 20%
                   </div>
                 )}
@@ -835,15 +841,15 @@ Question: ${threadChat.input}`;
         </div>
 
         {/* Messages area */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto bg-gradient-to-b from-transparent to-slate-900/20">
           {mainChat.messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
                 <div className="text-6xl mb-4">💬</div>
-                <h2 className="text-xl font-semibold text-gray-700 mb-2">Start a conversation</h2>
-                <p className="text-gray-500 mb-4">Type a message below to begin chatting with AI</p>
-                <div className="text-sm text-gray-400 max-w-md">
-                  <strong>Pro tip:</strong> After getting an AI response, you can select any part of the text and create a new threaded conversation about that specific context!
+                <h2 className="text-xl font-semibold text-white mb-2">Start a conversation</h2>
+                <p className="text-muted mb-4">Type a message below to begin chatting with AI</p>
+                <div className="text-sm text-gray-400 max-w-md bg-card/40 p-4 rounded-lg border border-custom">
+                  <strong className="text-accent-blue">Pro tip:</strong> After getting an AI response, you can select any part of the text and create a new threaded conversation about that specific context!
                 </div>
               </div>
             </div>
@@ -860,11 +866,11 @@ Question: ${threadChat.input}`;
               ))}
               {mainChat.isLoading && (
                 <div className="flex justify-start">
-                  <div className="bg-gray-200 p-4 rounded-lg max-w-xs">
+                  <div className="bg-card/80 backdrop-blur-sm p-4 rounded-lg max-w-xs border border-custom">
                     <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      <div className="w-2 h-2 bg-accent-blue rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-accent-blue rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                      <div className="w-2 h-2 bg-accent-blue rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                     </div>
                   </div>
                 </div>
@@ -874,7 +880,7 @@ Question: ${threadChat.input}`;
         </div>
         
         {/* Chat Input */}
-        <div className="border-t bg-white p-6">
+        <div className="border-t border-custom bg-card/60 backdrop-blur-sm p-6">
           <div className={`mx-auto transition-all duration-300 ${
             expandedThread && expandedThread !== 'main' 
               ? 'max-w-full px-2' 
@@ -897,7 +903,7 @@ Question: ${threadChat.input}`;
 
       {/* Thread panels - dynamic width with multi-row support */}
       {hasActiveThreads && (
-        <div className={`${threadWidth} flex flex-col transition-all duration-300`}>
+        <div className={`${threadWidth} flex flex-col transition-all duration-300 p-2 space-y-2`}>
           {threadRows.map((rowThreads, rowIndex) => (
             <div key={rowIndex} className="flex-1 min-h-0 flex flex-col">
               <div className="flex-1 flex min-h-0">
@@ -907,8 +913,8 @@ Question: ${threadChat.input}`;
               </div>
               {/* Row separator for visual clarity */}
               {rowIndex < threadRows.length - 1 && (
-                <div className="h-1 bg-gray-100 border-t border-gray-200">
-                  <div className="h-full bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+                <div className="h-1 bg-card/40 border-t border-custom">
+                  <div className="h-full bg-gradient-to-r from-transparent via-accent-blue/30 to-transparent"></div>
                 </div>
               )}
             </div>
