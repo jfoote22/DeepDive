@@ -19,6 +19,7 @@ export interface Thread {
   title?: string;
   rowId?: number; // Track which row this thread belongs to
   sourceType?: 'main' | 'thread'; // Track if created from main chat or another thread
+  actionType?: 'ask' | 'details' | 'simplify' | 'examples'; // Track which context action was used
 }
 
 type ModelProvider = 'openai' | 'claude' | 'anthropic';
@@ -49,14 +50,14 @@ function useThreadChat(selectedModel: ModelProvider, threadId: string) {
 }
 
 export default function ThreadedChat() {
-  const [selectedModel, setSelectedModel] = useState<ModelProvider>('claude');
+  const [selectedModel, setSelectedModel] = useState<ModelProvider>('anthropic');
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [selectedText, setSelectedText] = useState<string>('');
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [selectedMessageId, setSelectedMessageId] = useState<string>('');
-  const [showRerunMenu, setShowRerunMenu] = useState<string | null>(null);
+
   // Add state for thread expansion
   const [expandedThread, setExpandedThread] = useState<string | 'main' | null>('main');
   // Track which message/thread context menu originated from
@@ -66,6 +67,10 @@ export default function ThreadedChat() {
   const [isResizing, setIsResizing] = useState(false);
   const [startX, setStartX] = useState(0);
   const [startWidth, setStartWidth] = useState(0);
+  // Row collapse state
+  const [collapsedRows, setCollapsedRows] = useState<Set<number>>(new Set());
+  // Context collapse state
+  const [collapsedContexts, setCollapsedContexts] = useState<Set<string>>(new Set());
   
   // Store chat instances for each thread - each thread gets its own isolated chat
   const [threadChatInstances, setThreadChatInstances] = useState<{[key: string]: any}>({});
@@ -128,7 +133,7 @@ export default function ThreadedChat() {
     setShowContextMenu(true);
   };
 
-  const createNewThread = (context: string, autoExpand: boolean = false, autoSend: boolean = false) => {
+  const createNewThread = (context: string, autoExpand: boolean = false, autoSend: boolean = false, actionType: 'ask' | 'details' | 'simplify' | 'examples' = 'ask') => {
     // Create a unique thread ID with timestamp and random component for complete uniqueness
     const newThreadId = `thread-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
@@ -193,7 +198,8 @@ export default function ThreadedChat() {
       selectedContext: context,
       title: title,
       rowId: rowId,
-      sourceType: sourceType
+      sourceType: sourceType,
+      actionType: actionType
     };
 
     // Add thread to the list - each thread is completely independent
@@ -253,48 +259,69 @@ export default function ThreadedChat() {
       setActiveThreadId(null);
     }
     
-    // Close any open menus for this thread
-    if (showRerunMenu === threadId) {
-      setShowRerunMenu(null);
-    }
+
   };
 
   const ContextMenu = () => {
     if (!showContextMenu) return null;
 
+    const menuItems = [
+      {
+        action: 'ask',
+        icon: '💬',
+        label: 'Ask about this',
+        onClick: () => createNewThread(selectedText, false, false, 'ask'),
+        colorScheme: getActionColorScheme('ask')
+      },
+      {
+        action: 'details',
+        icon: '🔍',
+        label: 'Get more details',
+        onClick: () => createNewThread(selectedText, true, false, 'details'),
+        colorScheme: getActionColorScheme('details')
+      },
+      {
+        action: 'simplify',
+        icon: '🎯',
+        label: 'Simplify this',
+        onClick: () => createNewThread(`Please explain this in the simplest terms possible, as if you're teaching it to someone who is completely new to the topic: "${selectedText}"`, false, true, 'simplify'),
+        colorScheme: getActionColorScheme('simplify')
+      },
+      {
+        action: 'examples',
+        icon: '📝',
+        label: 'Give examples',
+        onClick: () => createNewThread(`Please provide 3-5 concrete, practical examples that illustrate or relate to: "${selectedText}". Make the examples diverse and easy to understand.`, false, true, 'examples'),
+        colorScheme: getActionColorScheme('examples')
+      }
+    ];
+
     return (
       <div 
-        className="fixed z-50 bg-card/95 backdrop-blur-sm border border-custom rounded-lg shadow-xl py-2 min-w-[220px]"
-        style={{ left: contextMenuPosition.x - 110, top: contextMenuPosition.y }}
+        className="fixed z-50 bg-card/95 backdrop-blur-sm border border-custom rounded-lg shadow-xl py-2 min-w-[240px]"
+        style={{ left: contextMenuPosition.x - 120, top: contextMenuPosition.y }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-3 py-2 text-xs text-muted border-b border-custom">
           Create new thread from selection
         </div>
-        <button
-          onClick={() => createNewThread(selectedText, false)}
-          className="w-full px-4 py-2 text-left hover:bg-hover text-sm text-white font-medium transition-colors duration-200"
-        >
-          💬 Ask about this
-        </button>
-        <button
-          onClick={() => createNewThread(selectedText, true)}
-          className="w-full px-4 py-2 text-left hover:bg-hover text-sm text-white font-medium transition-colors duration-200"
-        >
-          🔍 Get more details
-        </button>
-        <button
-          onClick={() => createNewThread(`Please explain this in the simplest terms possible, as if you're teaching it to someone who is completely new to the topic: "${selectedText}"`, false, true)}
-          className="w-full px-4 py-2 text-left hover:bg-hover text-sm text-white font-medium transition-colors duration-200"
-        >
-          🎯 Simplify this
-        </button>
-        <button
-          onClick={() => createNewThread(`Please provide 3-5 concrete, practical examples that illustrate or relate to: "${selectedText}". Make the examples diverse and easy to understand.`, false, true)}
-          className="w-full px-4 py-2 text-left hover:bg-hover text-sm text-white font-medium transition-colors duration-200"
-        >
-          📝 Give examples
-        </button>
+        <div className="py-1">
+          {menuItems.map((item) => (
+            <button
+              key={item.action}
+              onClick={item.onClick}
+              className={`w-full px-3 py-2 text-left text-sm font-medium transition-all duration-200 flex items-center gap-3 hover:scale-[1.02] ${item.colorScheme.bg}/20 hover:${item.colorScheme.bg}/30 border-l-4 ${item.colorScheme.border} mx-1 my-1 rounded-r-lg`}
+            >
+              <div className={`w-6 h-6 rounded-full ${item.colorScheme.bg} flex items-center justify-center text-xs`}>
+                {item.icon}
+              </div>
+              <span className="text-white">{item.label}</span>
+              <div className="ml-auto">
+                <div className={`w-3 h-3 rounded-full ${item.colorScheme.bg} opacity-80`}></div>
+              </div>
+            </button>
+          ))}
+        </div>
         <div className="border-t border-custom mt-1 pt-1">
           <button
             onClick={() => setShowContextMenu(false)}
@@ -374,6 +401,57 @@ export default function ThreadedChat() {
     </form>
   );
 
+  // Helper function to get color scheme based on action type
+  const getActionColorScheme = (actionType?: string) => {
+    switch (actionType) {
+      case 'ask':
+        return {
+          bg: 'bg-accent-blue',
+          border: 'border-accent-blue',
+          text: 'text-white',
+          badgeBg: 'bg-white/20',
+          badgeText: 'text-white',
+          badgeBorder: 'border-white/30'
+        };
+      case 'details':
+        return {
+          bg: 'bg-accent-green',
+          border: 'border-accent-green',
+          text: 'text-white',
+          badgeBg: 'bg-white/20',
+          badgeText: 'text-white',
+          badgeBorder: 'border-white/30'
+        };
+      case 'simplify':
+        return {
+          bg: 'bg-accent-orange',
+          border: 'border-accent-orange',
+          text: 'text-white',
+          badgeBg: 'bg-white/20',
+          badgeText: 'text-white',
+          badgeBorder: 'border-white/30'
+        };
+      case 'examples':
+        return {
+          bg: 'bg-accent-purple',
+          border: 'border-accent-purple',
+          text: 'text-white',
+          badgeBg: 'bg-white/20',
+          badgeText: 'text-white',
+          badgeBorder: 'border-white/30'
+        };
+      default:
+        return {
+          bg: 'bg-card/80',
+          border: 'border-custom',
+          text: 'text-white',
+          badgeBg: 'bg-slate-700/30',
+          badgeText: 'text-slate-300',
+          badgeBorder: 'border-slate-600'
+        };
+    }
+  };
+
   const MessageContent = ({ message, isThread = false, threadId }: { message: any, isThread?: boolean, threadId?: string }) => {
     const isUser = message.role === 'user';
     
@@ -438,28 +516,7 @@ export default function ThreadedChat() {
       return () => window.removeEventListener('autoSendToThread', handleAutoSend);
     }, [thread.id, threadChat]);
     
-    // Function to handle different types of context re-runs
-    const handleContextRerun = (type: 'original' | 'different' | 'simplified') => {
-      if (!thread.selectedContext) return;
-      
-      let prompt = '';
-      switch (type) {
-        case 'original':
-          prompt = thread.selectedContext;
-          break;
-        case 'different':
-          prompt = `Please explain this from a different perspective: "${thread.selectedContext}"`;
-          break;
-        case 'simplified':
-          prompt = `Please explain this in the simplest terms possible: "${thread.selectedContext}"`;
-          break;
-      }
-      
-      threadChat.append({
-        role: 'user',
-        content: prompt
-      });
-    };
+
 
     // Calculate thread width based on expansion state
     const isExpanded = expandedThread === thread.id;
@@ -474,14 +531,17 @@ export default function ThreadedChat() {
           ? 'w-80' // Standard size when main is expanded
           : 'flex-1'; // Equal share in balanced view
     
+    // Get color scheme based on action type
+    const colorScheme = getActionColorScheme(thread.actionType);
+    
     return (
       <div className={`${threadPanelWidth} bg-card/60 backdrop-blur border-l-2 border-accent-blue/40 border-r border-custom shadow-lg flex flex-col h-full transition-all duration-300 ${isCollapsed || isMainExpanded ? 'min-w-80' : ''} slide-in mx-1`}>
         {/* Thread Header */}
-        <div className="p-4 border-b-2 border-accent-blue/30 bg-card/80 backdrop-blur-sm shadow-sm">
+        <div className={`p-4 border-b-2 ${colorScheme.border} ${colorScheme.bg} shadow-sm`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-white text-sm">Thread</h3>
-              <span className="text-xs bg-accent-blue/20 text-accent-blue px-2 py-1 rounded-full border border-accent-blue/30">
+              <span className={`text-xs ${colorScheme.badgeBg} ${colorScheme.badgeText} px-2 py-1 rounded-full border ${colorScheme.badgeBorder}`}>
                 #{threads.findIndex(t => t.id === thread.id) + 1}
               </span>
               {thread.rowId !== undefined && thread.rowId > 0 && (
@@ -489,9 +549,6 @@ export default function ThreadedChat() {
                   Row {thread.rowId + 1}
                 </span>
               )}
-              <span className="text-xs text-muted">
-                ID: {thread.id.split('-').pop()}
-              </span>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -512,54 +569,28 @@ export default function ThreadedChat() {
             </div>
           </div>
           {thread.selectedContext && (
-            <div className="mt-2 p-3 bg-accent-yellow/10 border border-accent-yellow/20 rounded-lg text-xs backdrop-blur-sm">
-              <div className="flex items-center justify-between mb-2">
+            <div className="mt-2 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border border-gray-200/20 rounded-lg text-xs">
+              <div 
+                className="flex items-center justify-between p-3 cursor-pointer hover:bg-slate-800/30 transition-colors"
+                onClick={() => toggleContextCollapse(thread.id)}
+              >
                 <div className="font-medium text-accent-yellow">Context:</div>
-                <div className="relative">
-                  <button
-                    onClick={() => setShowRerunMenu(showRerunMenu === thread.id ? null : thread.id)}
-                    className="text-accent-yellow hover:text-accent-yellow/80 text-xs px-2 py-1 bg-accent-yellow/20 hover:bg-accent-yellow/30 rounded-lg transition-colors flex items-center gap-1 border border-accent-yellow/30"
-                    title="Re-run this context"
+                <button className="text-accent-yellow hover:text-accent-yellow/80 transition-colors">
+                  <svg 
+                    className={`w-4 h-4 transition-transform duration-200 ${collapsedContexts.has(thread.id) ? 'rotate-0' : 'rotate-180'}`} 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
                   >
-                    🔄 Re-run <span className="text-xs">▼</span>
-                  </button>
-                  {showRerunMenu === thread.id && (
-                    <div 
-                      className="absolute right-0 top-full mt-1 bg-card/90 backdrop-blur border border-custom rounded-lg shadow-xl py-1 min-w-[180px] z-50"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button
-                        onClick={() => {
-                          handleContextRerun('original');
-                          setShowRerunMenu(null);
-                        }}
-                        className="w-full px-3 py-2 text-left hover:bg-hover text-xs text-white transition-colors"
-                      >
-                        🔄 Re-run original
-                      </button>
-                      <button
-                        onClick={() => {
-                          handleContextRerun('different');
-                          setShowRerunMenu(null);
-                        }}
-                        className="w-full px-3 py-2 text-left hover:bg-hover text-xs text-white transition-colors"
-                      >
-                        🔀 Different perspective
-                      </button>
-                      <button
-                        onClick={() => {
-                          handleContextRerun('simplified');
-                          setShowRerunMenu(null);
-                        }}
-                        className="w-full px-3 py-2 text-left hover:bg-hover text-xs text-white transition-colors"
-                      >
-                        🎯 Simplified version
-                      </button>
-                    </div>
-                  )}
-                </div>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
               </div>
-              <div className="text-accent-yellow/90 italic">"{thread.selectedContext}"</div>
+              {!collapsedContexts.has(thread.id) && (
+                <div className="px-3 pb-3">
+                  <div className="text-accent-yellow/90 italic bg-slate-800/30 p-2 rounded">&quot;{thread.selectedContext}&quot;</div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -640,6 +671,32 @@ Question: ${threadChat.input}`;
       // Expand the clicked thread
       setExpandedThread(threadId);
     }
+  };
+
+  // Toggle row collapse/expand
+  const toggleRowCollapse = (rowIndex: number) => {
+    setCollapsedRows(prev => {
+      const newCollapsed = new Set(prev);
+      if (newCollapsed.has(rowIndex)) {
+        newCollapsed.delete(rowIndex);
+      } else {
+        newCollapsed.add(rowIndex);
+      }
+      return newCollapsed;
+    });
+  };
+
+  // Toggle context collapse/expand
+  const toggleContextCollapse = (threadId: string) => {
+    setCollapsedContexts(prev => {
+      const newCollapsed = new Set(prev);
+      if (newCollapsed.has(threadId)) {
+        newCollapsed.delete(threadId);
+      } else {
+        newCollapsed.add(threadId);
+      }
+      return newCollapsed;
+    });
   };
 
   // Handle manual resize
@@ -738,8 +795,75 @@ Question: ${threadChat.input}`;
 
   // ThreadRow component to handle a single row of threads
   const ThreadRow = ({ threads: rowThreads, rowIndex }: { threads: Thread[], rowIndex: number }) => {
+    const isCollapsed = collapsedRows.has(rowIndex);
+    
+    if (isCollapsed) {
+      // Collapsed view - thin horizontal bar with color indicators and context previews
+      return (
+        <div className="flex-shrink-0 h-16 bg-card/40 border border-custom rounded-lg mx-2 mb-2 transition-all duration-300">
+          <div className="flex items-center justify-between h-full px-4">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => toggleRowCollapse(rowIndex)}
+                className="text-accent-blue hover:text-accent-blue/80 transition-colors"
+                title="Expand row"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+              </button>
+              <div className="text-sm text-white font-medium">
+                Row {rowIndex + 1}
+              </div>
+              <div className="flex items-center gap-2">
+                {rowThreads.map((thread, idx) => {
+                  const colorScheme = getActionColorScheme(thread.actionType);
+                  const contextPreview = thread.selectedContext 
+                    ? thread.selectedContext.substring(0, 30) + (thread.selectedContext.length > 30 ? '...' : '')
+                    : 'No context';
+                  
+                  return (
+                    <div key={thread.id} className="flex items-center gap-1">
+                      <div className={`px-2 py-1 rounded-lg ${colorScheme.bg} border ${colorScheme.border} flex items-center gap-1`}>
+                        <span className="text-xs text-white font-medium">
+                          #{threads.findIndex(t => t.id === thread.id) + 1}
+                        </span>
+                        <span className="text-xs text-white/80 max-w-24 truncate">
+                          {contextPreview}
+                        </span>
+                      </div>
+                      {idx < rowThreads.length - 1 && <span className="text-muted">•</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="text-xs text-muted">
+              {rowThreads.length} thread{rowThreads.length !== 1 ? 's' : ''}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Expanded view - full thread panels with collapse button
     return (
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 relative">
+        {/* Row header with collapse button */}
+        <div className="absolute -top-8 left-2 z-10 flex items-center gap-2">
+          <button
+            onClick={() => toggleRowCollapse(rowIndex)}
+            className="text-accent-blue hover:text-accent-blue/80 transition-colors bg-card/60 backdrop-blur-sm rounded-lg px-2 py-1 border border-custom"
+            title="Collapse row"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+            </svg>
+          </button>
+          <span className="text-xs text-muted bg-card/60 backdrop-blur-sm rounded-lg px-2 py-1 border border-custom">
+            Row {rowIndex + 1}
+          </span>
+        </div>
         {rowThreads.map((thread) => (
           <ThreadPanel key={thread.id} thread={thread} />
         ))}
@@ -774,10 +898,9 @@ Question: ${threadChat.input}`;
   return (
     <div 
       className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" 
-      onClick={() => {
-        setShowContextMenu(false);
-        setShowRerunMenu(null);
-      }}
+             onClick={() => {
+         setShowContextMenu(false);
+       }}
     >
       {/* Main chat area - dynamic width based on expansion state */}
       <div className={`${hasActiveThreads ? mainWidth : 'w-full'} flex flex-col transition-all duration-300 ${hasActiveThreads ? 'border-r-2 border-accent-blue/30 shadow-lg' : 'border-r border-transparent'}`}>
@@ -901,24 +1024,43 @@ Question: ${threadChat.input}`;
       {/* Resizer handle */}
       <Resizer />
 
-      {/* Thread panels - dynamic width with multi-row support */}
+      {/* Thread Container */}
       {hasActiveThreads && (
-        <div className={`${threadWidth} flex flex-col transition-all duration-300 p-2 space-y-2`}>
-          {threadRows.map((rowThreads, rowIndex) => (
-            <div key={rowIndex} className="flex-1 min-h-0 flex flex-col">
-              <div className="flex-1 flex min-h-0">
-                {rowThreads.map((thread) => (
-                  <ThreadPanel key={thread.id} thread={thread} />
-                ))}
-              </div>
-              {/* Row separator for visual clarity */}
-              {rowIndex < threadRows.length - 1 && (
-                <div className="h-1 bg-card/40 border-t border-custom">
-                  <div className="h-full bg-gradient-to-r from-transparent via-accent-blue/30 to-transparent"></div>
+        <div className={`${threadWidth} bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 overflow-hidden flex flex-col transition-all duration-300`}>
+          {/* Thread Header */}
+          <div className="flex-shrink-0 bg-card/40 backdrop-blur-sm border-b border-custom">
+            <div className="p-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-white">Threads</h2>
+                <div className="flex items-center gap-3">
+                  {collapsedRows.size > 0 && (
+                    <span className="text-sm text-muted bg-card/50 px-2 py-1 rounded-lg">
+                      {collapsedRows.size} row{collapsedRows.size !== 1 ? 's' : ''} collapsed
+                    </span>
+                  )}
+                  {threads.length > 0 && (
+                    <span className="text-sm text-muted bg-card/50 px-2 py-1 rounded-lg">
+                      {threads.length} thread{threads.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
-          ))}
+          </div>
+
+          {/* Thread Rows Container */}
+          <div className="flex-1 overflow-y-auto p-2">
+            <div className="flex flex-col h-full">
+              {threadRows.map((rowThreads, rowIndex) => {
+                const isCollapsed = collapsedRows.has(rowIndex);
+                return (
+                  <div key={rowIndex} className={isCollapsed ? "flex-shrink-0 mb-2" : "flex-1 min-h-0 mb-4 pt-8"}>
+                    <ThreadRow threads={rowThreads} rowIndex={rowIndex} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
