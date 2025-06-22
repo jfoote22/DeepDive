@@ -190,7 +190,8 @@ export default function ThreadedChat() {
       title: title,
       rowId: rowId,
       sourceType: sourceType,
-      actionType: actionType
+      actionType: actionType,
+      parentThreadId: (contextMenuSource.isFromThread && contextMenuSource.threadId) ? contextMenuSource.threadId : undefined
     };
 
     // Add thread to the list - each thread is completely independent
@@ -581,6 +582,8 @@ export default function ThreadedChat() {
               <span className={`text-xs ${colorScheme.badgeBg} ${colorScheme.badgeText} px-2 py-1 rounded-full border ${colorScheme.badgeBorder}`}>
                 #{threads.findIndex(t => t.id === thread.id) + 1}
               </span>
+              {/* Context Source Information - inline with thread number */}
+              <span className="font-semibold text-white text-sm">{getContextSource(thread)}</span>
               {thread.rowId !== undefined && thread.rowId > 0 && (
                 <span className="text-xs bg-accent-purple/20 text-accent-purple px-2 py-1 rounded-full border border-accent-purple/30">
                   Row {thread.rowId + 1}
@@ -604,10 +607,6 @@ export default function ThreadedChat() {
                 ×
               </button>
             </div>
-          </div>
-          {/* Context Source Information */}
-          <div className="mt-2 text-xs text-slate-300">
-            <span className="font-medium">{getContextSource(thread)}</span>
           </div>
           {thread.selectedContext && (
             <div className="mt-2 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border border-gray-200/20 rounded-lg text-xs">
