@@ -106,31 +106,22 @@ export default function ThreadedChat() {
     const selectedText = selection.toString().trim();
     if (selectedText.length < 10) return; // Minimum selection length
 
+    console.log('Text selected:', selectedText); // Debug log
+
     setSelectedText(selectedText);
     setSelectedMessageId(messageId);
     setContextMenuSource({ messageId, isFromThread, threadId });
     
-    // Get selection position for context menu
-    const range = selection.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
+    // Always position the context menu in the center of the screen
+    const xPos = window.innerWidth / 2;
+    const yPos = window.innerHeight / 2;
     
-    // Adjust positioning for thread context menus to avoid going off-screen
-    let xPos = rect.left + rect.width / 2;
-    let yPos = rect.bottom + 10;
-    
-    // If we're in a thread, adjust position to stay within bounds
-    if (isFromThread) {
-      const windowWidth = window.innerWidth;
-      const windowHeight = window.innerHeight;
-      
-      // Keep context menu within screen bounds
-      if (xPos > windowWidth - 250) xPos = windowWidth - 250;
-      if (xPos < 50) xPos = 50;
-      if (yPos > windowHeight - 200) yPos = rect.top - 120;
-    }
+    console.log('Setting context menu position:', { x: xPos, y: yPos }); // Debug log
     
     setContextMenuPosition({ x: xPos, y: yPos });
     setShowContextMenu(true);
+    
+    console.log('Context menu should be showing'); // Debug log
   }, []);
 
   const createNewThread = (context: string, autoExpand: boolean = false, autoSend: boolean = false, actionType: 'ask' | 'details' | 'simplify' | 'examples' = 'ask') => {
@@ -296,11 +287,21 @@ export default function ThreadedChat() {
       }
     ];
 
+    console.log('Rendering context menu at position:', contextMenuPosition); // Debug log
+    
     return (
       <div 
-        className="fixed z-50 bg-card/95 backdrop-blur-sm border border-custom rounded-lg shadow-xl py-2 min-w-[240px]"
-        style={{ left: contextMenuPosition.x - 120, top: contextMenuPosition.y }}
+        data-context-menu
+        className="fixed bg-slate-800 border border-slate-600 rounded-lg shadow-2xl py-2 min-w-[240px]"
+        style={{ 
+          left: contextMenuPosition.x - 120, // Center horizontally (240px width / 2)
+          top: contextMenuPosition.y - 140,  // Center vertically (approximate menu height / 2)
+          transform: 'translateZ(0)', // Force hardware acceleration for smooth positioning
+          pointerEvents: 'auto', // Ensure it can be clicked
+          zIndex: 99999 // Ensure it's above everything else
+        }}
         onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.preventDefault()} // Prevent text selection from being cleared
       >
         <div className="px-3 py-2 text-xs text-muted border-b border-custom">
           Create new thread from selection
@@ -776,8 +777,8 @@ Question: ${threadChat.input}`;
       // Specific thread expanded: main takes ~20%, expanded thread gets most of the remaining ~80%
       return { mainWidth: 'w-[20%]', threadWidth: 'w-[80%]', mainWidthPercent: 20, threadWidthPercent: 80 };
     } else {
-      // Balanced view: main takes 50%, threads share 50%
-      return { mainWidth: 'w-1/2', threadWidth: 'w-1/2', mainWidthPercent: 50, threadWidthPercent: 50 };
+      // Default view with threads: main takes minimal space (20%), threads get maximum space (80%)
+      return { mainWidth: 'w-1/5', threadWidth: 'w-4/5', mainWidthPercent: 20, threadWidthPercent: 80 };
     }
   };
 
@@ -911,170 +912,252 @@ Question: ${threadChat.input}`;
 
   return (
     <div 
-      className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" 
-             onClick={() => {
-         setShowContextMenu(false);
-       }}
+      className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4" 
+      onClick={(e) => {
+        // Only close context menu if clicking outside of it
+        if (!showContextMenu) return;
+        const target = e.target as HTMLElement;
+        if (!target.closest('[data-context-menu]')) {
+          setShowContextMenu(false);
+        }
+      }}
+      style={{
+        // Preserve text selection styling
+        userSelect: showContextMenu ? 'none' : 'auto'
+      }}
     >
-      {/* Main chat area - dynamic width based on expansion state */}
-      <div className={`${hasActiveThreads ? mainWidth : 'w-full'} flex flex-col transition-all duration-300 ${hasActiveThreads ? 'border-r-2 border-accent-blue/30 shadow-lg' : 'border-r border-transparent'}`}>
-        {/* Header with model selector */}
-        <div className="border-b border-custom bg-card/80 backdrop-blur-sm p-4">
-          <div className="mx-auto max-w-full px-4">
-            <div className="flex items-center justify-between mb-4">
-              <h1 className={`font-bold text-white ${expandedThread && expandedThread !== 'main' ? 'text-lg' : 'text-2xl'} transition-all duration-300`}>
-                {expandedThread && expandedThread !== 'main' ? 'Main Chat' : 'AI Chat with Contextual Threading'}
-              </h1>
-              {hasActiveThreads && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => toggleThreadExpansion('main')}
-                    className={`p-2 rounded-lg hover:bg-hover transition-colors ${
-                      expandedThread === 'main' ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
-                    }`}
-                    title={expandedThread === 'main' ? 'Collapse main chat' : 'Expand main chat'}
-                  >
-                    {expandedThread === 'main' ? '📖' : '📑'}
-                  </button>
-                  {manualMainWidth !== null && (
+      <div className={`mx-auto h-[calc(100vh-2rem)] ${hasActiveThreads ? 'max-w-none w-full' : 'max-w-4xl'} bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700/50 shadow-2xl overflow-hidden flex`}>
+        {/* Main chat area - dynamic width based on expansion state */}
+        <div className={`${hasActiveThreads ? mainWidth : 'w-full'} flex flex-col transition-all duration-300 ${hasActiveThreads ? 'border-r-2 border-accent-blue/30 shadow-lg' : 'border-r border-transparent'} ${!hasActiveThreads ? 'rounded-xl' : 'rounded-l-xl'}`}>
+          {/* Header with model selector */}
+          <div className="border-b border-custom bg-card/80 backdrop-blur-sm p-4">
+            <div className="mx-auto max-w-full px-4">
+              <div className="flex items-center justify-between mb-4">
+                <h1 className={`font-bold text-white ${expandedThread && expandedThread !== 'main' ? 'text-lg' : 'text-2xl'} transition-all duration-300`}>
+                  {expandedThread && expandedThread !== 'main' ? 'Main Chat' : 'AI Chat with Contextual Threading'}
+                </h1>
+                {hasActiveThreads && (
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setManualMainWidth(null)}
-                      className="p-1 text-xs bg-accent-orange/20 text-accent-orange hover:bg-accent-orange/30 rounded-lg transition-colors"
-                      title="Reset to automatic sizing"
+                      onClick={() => toggleThreadExpansion('main')}
+                      className={`p-2 rounded-lg hover:bg-hover transition-colors ${
+                        expandedThread === 'main' ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
+                      }`}
+                      title={expandedThread === 'main' ? 'Collapse main chat' : 'Expand main chat'}
                     >
-                      🔄 Reset
+                      {expandedThread === 'main' ? '📖' : '📑'}
                     </button>
+                    {manualMainWidth !== null && (
+                      <button
+                        onClick={() => setManualMainWidth(null)}
+                        className="p-1 text-xs bg-accent-orange/20 text-accent-orange hover:bg-accent-orange/30 rounded-lg transition-colors"
+                        title="Reset to automatic sizing"
+                      >
+                        🔄 Reset
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              <ModelSelector />
+              {hasActiveThreads && (
+                <div className="mt-2 text-sm text-muted">
+                  💡 Select text in any AI response to create contextual threads - drill deeper into topics!
+                  {threadRows.length > 1 && (
+                    <div className="mt-1 text-xs text-accent-purple bg-accent-purple/10 px-3 py-2 rounded-lg border border-accent-purple/20">
+                      📚 Multi-row layout active - {threadRows.length} rows of threads
+                    </div>
+                  )}
+                  {manualMainWidth !== null && !expandedThread && (
+                    <div className="mt-1 text-xs text-accent-orange bg-accent-orange/10 px-3 py-2 rounded-lg border border-accent-orange/20">
+                      📏 Manual width: {Math.round(manualMainWidth)}% main, {100 - Math.round(manualMainWidth)}% threads
+                    </div>
+                  )}
+                  {expandedThread === 'main' && (
+                    <div className="mt-1 text-xs text-accent-blue bg-accent-blue/10 px-3 py-2 rounded-lg border border-accent-blue/20">
+                      🔍 Main chat expanded (75% width) for easier reading
+                    </div>
+                  )}
+                  {expandedThread && expandedThread !== 'main' && (
+                    <div className="mt-1 text-xs text-accent-green bg-accent-green/10 px-3 py-2 rounded-lg border border-accent-green/20">
+                      🔍 Thread #{threads.findIndex(t => t.id === expandedThread) + 1} expanded - Main chat minimized to 20%
+                    </div>
                   )}
                 </div>
               )}
             </div>
-            <ModelSelector />
-            {hasActiveThreads && (
-              <div className="mt-2 text-sm text-muted">
-                💡 Select text in any AI response to create contextual threads - drill deeper into topics!
-                {threadRows.length > 1 && (
-                  <div className="mt-1 text-xs text-accent-purple bg-accent-purple/10 px-3 py-2 rounded-lg border border-accent-purple/20">
-                    📚 Multi-row layout active - {threadRows.length} rows of threads
+          </div>
+
+          {/* Messages area */}
+          <div className="flex-1 overflow-y-auto bg-gradient-to-b from-transparent to-slate-900/20">
+            {mainChat.messages.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <div className="text-6xl mb-4">💬</div>
+                  <h2 className="text-xl font-semibold text-white mb-2">Start a conversation</h2>
+                  <p className="text-muted mb-4">Type a message below to begin chatting with AI</p>
+                  <div className="text-sm text-gray-400 max-w-md bg-card/40 p-4 rounded-lg border border-custom">
+                    <strong className="text-accent-blue">Pro tip:</strong> After getting an AI response, you can select any part of the text and create a new threaded conversation about that specific context!
                   </div>
-                )}
-                {manualMainWidth !== null && !expandedThread && (
-                  <div className="mt-1 text-xs text-accent-orange bg-accent-orange/10 px-3 py-2 rounded-lg border border-accent-orange/20">
-                    📏 Manual width: {Math.round(manualMainWidth)}% main, {100 - Math.round(manualMainWidth)}% threads
-                  </div>
-                )}
-                {expandedThread === 'main' && (
-                  <div className="mt-1 text-xs text-accent-blue bg-accent-blue/10 px-3 py-2 rounded-lg border border-accent-blue/20">
-                    🔍 Main chat expanded (75% width) for easier reading
-                  </div>
-                )}
-                {expandedThread && expandedThread !== 'main' && (
-                  <div className="mt-1 text-xs text-accent-green bg-accent-green/10 px-3 py-2 rounded-lg border border-accent-green/20">
-                    🔍 Thread #{threads.findIndex(t => t.id === expandedThread) + 1} expanded - Main chat minimized to 20%
+                </div>
+              </div>
+            ) : (
+              <div className="mx-auto space-y-4 max-w-full p-4">
+                {mainChat.messages.map((message) => (
+                  <MessageContent key={message.id} message={message} />
+                ))}
+                {mainChat.isLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-card/80 backdrop-blur-sm p-4 rounded-lg max-w-xs border border-custom">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-accent-blue rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-accent-blue rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-accent-blue rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
             )}
           </div>
+          
+          {/* Chat Input */}
+          <div className="border-t border-custom bg-card/60 backdrop-blur-sm p-6">
+            <div className="mx-auto max-w-full">
+              <ChatInput 
+                onSubmit={mainChat.handleSubmit}
+                input={mainChat.input}
+                handleInputChange={mainChat.handleInputChange}
+                isLoading={mainChat.isLoading}
+              />
+            </div>
+          </div>
         </div>
 
-        {/* Messages area */}
-        <div className="flex-1 overflow-y-auto bg-gradient-to-b from-transparent to-slate-900/20">
-          {mainChat.messages.length === 0 ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <div className="text-6xl mb-4">💬</div>
-                <h2 className="text-xl font-semibold text-white mb-2">Start a conversation</h2>
-                <p className="text-muted mb-4">Type a message below to begin chatting with AI</p>
-                <div className="text-sm text-gray-400 max-w-md bg-card/40 p-4 rounded-lg border border-custom">
-                  <strong className="text-accent-blue">Pro tip:</strong> After getting an AI response, you can select any part of the text and create a new threaded conversation about that specific context!
+        {/* Resizer handle */}
+        <Resizer />
+
+        {/* Thread Container */}
+        {hasActiveThreads && (
+          <div className={`${threadWidth} bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 overflow-hidden flex flex-col transition-all duration-300 rounded-r-xl`}>
+            {/* Thread Header */}
+            <div className="flex-shrink-0 bg-card/40 backdrop-blur-sm border-b border-custom">
+              <div className="p-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-white">Threads</h2>
+                  <div className="flex items-center gap-3">
+                    {collapsedRows.size > 0 && (
+                      <span className="text-sm text-muted bg-card/50 px-2 py-1 rounded-lg">
+                        {collapsedRows.size} row{collapsedRows.size !== 1 ? 's' : ''} collapsed
+                      </span>
+                    )}
+                    {threads.length > 0 && (
+                      <span className="text-sm text-muted bg-card/50 px-2 py-1 rounded-lg">
+                        {threads.length} thread{threads.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="mx-auto space-y-4 max-w-full p-4">
-              {mainChat.messages.map((message) => (
-                <MessageContent key={message.id} message={message} />
-              ))}
-              {mainChat.isLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-card/80 backdrop-blur-sm p-4 rounded-lg max-w-xs border border-custom">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-accent-blue rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-accent-blue rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-2 h-2 bg-accent-blue rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+
+            {/* Thread Rows Container */}
+            <div className="flex-1 overflow-hidden p-2">
+              <div className="h-full flex flex-col gap-2">
+                {threadRows.map((rowThreads, rowIndex) => {
+                  const isCollapsed = collapsedRows.has(rowIndex);
+                  const expandedRowsCount = threadRows.length - collapsedRows.size;
+                  const heightClass = isCollapsed 
+                    ? "flex-shrink-0" 
+                    : expandedRowsCount > 0 
+                      ? `flex-1 min-h-0` 
+                      : "flex-1";
+                  
+                  return (
+                    <div key={rowIndex} className={heightClass}>
+                      <ThreadRow threads={rowThreads} rowIndex={rowIndex} />
                     </div>
-                  </div>
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </div>
-          )}
-        </div>
-        
-        {/* Chat Input */}
-        <div className="border-t border-custom bg-card/60 backdrop-blur-sm p-6">
-          <div className="mx-auto max-w-full">
-            <ChatInput 
-              onSubmit={mainChat.handleSubmit}
-              input={mainChat.input}
-              handleInputChange={mainChat.handleInputChange}
-              isLoading={mainChat.isLoading}
-            />
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Resizer handle */}
-      <Resizer />
-
-      {/* Thread Container */}
-      {hasActiveThreads && (
-        <div className={`${threadWidth} bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 overflow-hidden flex flex-col transition-all duration-300`}>
-          {/* Thread Header */}
-          <div className="flex-shrink-0 bg-card/40 backdrop-blur-sm border-b border-custom">
-            <div className="p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Threads</h2>
-                <div className="flex items-center gap-3">
-                  {collapsedRows.size > 0 && (
-                    <span className="text-sm text-muted bg-card/50 px-2 py-1 rounded-lg">
-                      {collapsedRows.size} row{collapsedRows.size !== 1 ? 's' : ''} collapsed
-                    </span>
-                  )}
-                  {threads.length > 0 && (
-                    <span className="text-sm text-muted bg-card/50 px-2 py-1 rounded-lg">
-                      {threads.length} thread{threads.length !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
+      {/* Context Menu - Always rendered at screen center when active */}
+      {showContextMenu && (
+        <div 
+          data-context-menu
+          className="fixed bg-slate-800 border border-slate-600 rounded-lg shadow-2xl py-2 min-w-[240px] z-[99999]"
+          style={{ 
+            left: window.innerWidth / 2 - 120, // Center horizontally (240px width / 2)
+            top: window.innerHeight / 2 - 140,  // Center vertically (approximate menu height / 2)
+            transform: 'translateZ(0)', // Force hardware acceleration for smooth positioning
+            pointerEvents: 'auto' // Ensure it can be clicked
+          }}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.preventDefault()} // Prevent text selection from being cleared
+        >
+          <div className="px-3 py-2 text-xs text-muted border-b border-custom">
+            Create new thread from selection
           </div>
-
-          {/* Thread Rows Container */}
-          <div className="flex-1 overflow-hidden p-2">
-            <div className="h-full flex flex-col gap-2">
-              {threadRows.map((rowThreads, rowIndex) => {
-                const isCollapsed = collapsedRows.has(rowIndex);
-                const expandedRowsCount = threadRows.length - collapsedRows.size;
-                const heightClass = isCollapsed 
-                  ? "flex-shrink-0" 
-                  : expandedRowsCount > 0 
-                    ? `flex-1 min-h-0` 
-                    : "flex-1";
-                
-                return (
-                  <div key={rowIndex} className={heightClass}>
-                    <ThreadRow threads={rowThreads} rowIndex={rowIndex} />
-                  </div>
-                );
-              })}
-            </div>
+          <div className="py-1">
+            {[
+              {
+                action: 'ask',
+                icon: '💬',
+                label: 'Ask about this',
+                onClick: () => createNewThread(selectedText, false, false, 'ask'),
+                colorScheme: getActionColorScheme('ask')
+              },
+              {
+                action: 'details',
+                icon: '🔍',
+                label: 'Get more details',
+                onClick: () => createNewThread(selectedText, true, false, 'details'),
+                colorScheme: getActionColorScheme('details')
+              },
+              {
+                action: 'simplify',
+                icon: '🎯',
+                label: 'Simplify this',
+                onClick: () => createNewThread(`Please explain this in the simplest terms possible, as if you're teaching it to someone who is completely new to the topic: "${selectedText}"`, false, true, 'simplify'),
+                colorScheme: getActionColorScheme('simplify')
+              },
+              {
+                action: 'examples',
+                icon: '📝',
+                label: 'Give examples',
+                onClick: () => createNewThread(`Please provide 3-5 concrete, practical examples that illustrate or relate to: "${selectedText}". Make the examples diverse and easy to understand.`, false, true, 'examples'),
+                colorScheme: getActionColorScheme('examples')
+              }
+            ].map((item) => (
+              <button
+                key={item.action}
+                onClick={item.onClick}
+                className={`w-full px-3 py-2 text-left text-sm font-medium transition-all duration-200 flex items-center gap-3 hover:scale-[1.02] ${item.colorScheme.bg}/20 hover:${item.colorScheme.bg}/30 border-l-4 ${item.colorScheme.border} mx-1 my-1 rounded-r-lg`}
+              >
+                <div className={`w-6 h-6 rounded-full ${item.colorScheme.bg} flex items-center justify-center text-xs`}>
+                  {item.icon}
+                </div>
+                <span className="text-white">{item.label}</span>
+                <div className="ml-auto">
+                  <div className={`w-3 h-3 rounded-full ${item.colorScheme.bg} opacity-80`}></div>
+                </div>
+              </button>
+            ))}
+          </div>
+          <div className="border-t border-custom mt-1 pt-1">
+            <button
+              onClick={() => setShowContextMenu(false)}
+              className="w-full px-4 py-2 text-left hover:bg-hover text-sm text-muted font-medium transition-colors duration-200"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
-
-      {/* Context Menu */}
-      <ContextMenu />
     </div>
   );
 } 
