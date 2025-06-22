@@ -362,7 +362,7 @@ export default function ThreadedChat() {
     </div>
   );
 
-  const ChatInput = ({ isThread = false, onSubmit, input, handleInputChange, isLoading }: any) => (
+  const ChatInput = ({ isThread = false, onSubmit, input, handleInputChange, isLoading, onStop }: any) => (
     <form onSubmit={onSubmit} className="w-full">
       <div className="flex space-x-3">
         <textarea
@@ -382,23 +382,40 @@ export default function ThreadedChat() {
             }
           }}
         />
-        <button
-          type="submit"
-          disabled={isLoading || !input.trim()}
-          className="bg-accent-blue text-white px-6 py-4 rounded-lg font-medium hover:bg-accent-blue/80 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all duration-200 shadow-lg"
-        >
-          {isLoading ? (
-            <div className="flex items-center space-x-1">
-              <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
-              <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-              <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-            </div>
-          ) : (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
+        <div className="flex space-x-2">
+          {/* Stop button - only show when loading */}
+          {isLoading && (
+            <button
+              type="button"
+              onClick={onStop}
+              className="bg-accent-red text-white px-4 py-4 rounded-lg font-medium hover:bg-accent-red/80 transition-all duration-200 shadow-lg"
+              title="Stop response"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10h6v4H9z" />
+              </svg>
+            </button>
           )}
-        </button>
+          {/* Submit button */}
+          <button
+            type="submit"
+            disabled={isLoading || !input.trim()}
+            className="bg-accent-blue text-white px-6 py-4 rounded-lg font-medium hover:bg-accent-blue/80 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all duration-200 shadow-lg"
+          >
+            {isLoading ? (
+              <div className="flex items-center space-x-1">
+                <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              </div>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
     </form>
   );
@@ -695,6 +712,7 @@ Question: ${threadChat.input}`;
             input={threadChat.input}
             handleInputChange={threadChat.handleInputChange}
             isLoading={threadChat.isLoading}
+            onStop={threadChat.stop}
           />
         </div>
       </div>
@@ -1063,6 +1081,7 @@ Question: ${threadChat.input}`;
                 input={mainChat.input}
                 handleInputChange={mainChat.handleInputChange}
                 isLoading={mainChat.isLoading}
+                onStop={mainChat.stop}
               />
             </div>
           </div>
