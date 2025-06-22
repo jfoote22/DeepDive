@@ -1008,7 +1008,7 @@ Question: ${threadChat.input}`;
               )}
               
               {/* DeepDive Header */}
-              <div className="text-center mb-1 -mt-10">
+              <div className="text-center mb-4 -mt-2">
                 <h1 className="text-5xl font-bold text-white tracking-wide">DeepDive</h1>
               </div>
               
@@ -1016,26 +1016,6 @@ Question: ${threadChat.input}`;
               {hasActiveThreads && (
                 <div className="mt-2 text-sm text-muted">
                   💡 Select text in any AI response to create contextual threads - drill deeper into topics!
-                  {threadRows.length > 1 && (
-                    <div className="mt-1 text-xs text-accent-purple bg-accent-purple/10 px-3 py-2 rounded-lg border border-accent-purple/20">
-                      📚 Multi-row layout active - {threadRows.length} rows of threads
-                    </div>
-                  )}
-                  {manualMainWidth !== null && !expandedThread && (
-                    <div className="mt-1 text-xs text-accent-orange bg-accent-orange/10 px-3 py-2 rounded-lg border border-accent-orange/20">
-                      📏 Manual width: {Math.round(manualMainWidth)}% main, {100 - Math.round(manualMainWidth)}% threads
-                    </div>
-                  )}
-                  {expandedThread === 'main' && (
-                    <div className="mt-1 text-xs text-accent-blue bg-accent-blue/10 px-3 py-2 rounded-lg border border-accent-blue/20">
-                      🔍 Main chat expanded (75% width) for easier reading
-                    </div>
-                  )}
-                  {expandedThread && expandedThread !== 'main' && (
-                    <div className="mt-1 text-xs text-accent-green bg-accent-green/10 px-3 py-2 rounded-lg border border-accent-green/20">
-                      🔍 Thread #{threads.findIndex(t => t.id === expandedThread) + 1} expanded - Main chat minimized to 20%
-                    </div>
-                  )}
                 </div>
               )}
             </div>
