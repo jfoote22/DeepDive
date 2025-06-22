@@ -1003,18 +1003,29 @@ Present this as a completely NEW, comprehensive deep dive that integrates everyt
             });
             
             const rowCount = rowGroups.size;
-            const threadCount = relatedThreads.length;
+            
+            // Count total threads including all descendants (same logic as gatherThreadContentByRows)
+            const totalThreadCount = relatedThreads.reduce((count, rootThread) => {
+              const countThreadTree = (threadId: string, visited: Set<string> = new Set()): number => {
+                if (visited.has(threadId)) return 0;
+                visited.add(threadId);
+                
+                const childThreads = threads.filter(t => t.parentThreadId === threadId);
+                return 1 + childThreads.reduce((sum, child) => sum + countThreadTree(child.id, visited), 0);
+              };
+              return count + countThreadTree(rootThread.id);
+            }, 0);
             
                           return (
                 <button
                   onClick={() => createSynthesisThread(message.id, isThread, threadId)}
                   className="bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 hover:to-amber-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg flex items-center gap-2 border border-yellow-500/50"
-                  title={`Generate a synthesis summary in main chat from ${rowCount} row${rowCount > 1 ? 's' : ''} (${threadCount} total threads)`}
+                  title={`Generate a synthesis summary in main chat from ${rowCount} row${rowCount > 1 ? 's' : ''} (${totalThreadCount} total threads)`}
                 >
                   <span>🔗</span>
                   <span>Generate Synthesis</span>
                   <span className="bg-white/20 px-2 py-1 rounded text-xs">
-                    {rowCount > 1 ? `${rowCount} rows, ${threadCount} threads` : `${threadCount} threads`}
+                    {rowCount > 1 ? `${rowCount} rows, ${totalThreadCount} threads` : `${totalThreadCount} threads`}
                   </span>
                 </button>
               );
