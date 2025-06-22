@@ -402,6 +402,22 @@ export default function ThreadedChat() {
     </form>
   );
 
+  // Helper function to get action label based on action type
+  const getActionLabel = (actionType?: string) => {
+    switch (actionType) {
+      case 'ask':
+        return 'Ask about this';
+      case 'details':
+        return 'Get more details';
+      case 'simplify':
+        return 'Simplify this';
+      case 'examples':
+        return 'Give examples';
+      default:
+        return 'Thread';
+    }
+  };
+
   // Helper function to get color scheme based on action type
   const getActionColorScheme = (actionType?: string) => {
     switch (actionType) {
@@ -547,7 +563,7 @@ export default function ThreadedChat() {
         <div className={`flex-shrink-0 p-3 border-b-2 ${colorScheme.border} ${colorScheme.bg} shadow-sm`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-white text-sm">Thread</h3>
+              <h3 className="font-semibold text-white text-sm">{getActionLabel(thread.actionType)}</h3>
               <span className={`text-xs ${colorScheme.badgeBg} ${colorScheme.badgeText} px-2 py-1 rounded-full border ${colorScheme.badgeBorder}`}>
                 #{threads.findIndex(t => t.id === thread.id) + 1}
               </span>
