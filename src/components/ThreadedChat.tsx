@@ -930,10 +930,10 @@ Question: ${threadChat.input}`;
     <div 
       className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4" 
       onClick={(e) => {
-        // Only close context menu if clicking outside of it
+        // Only close context menu if clicking outside of it and the preview window
         if (!showContextMenu) return;
         const target = e.target as HTMLElement;
-        if (!target.closest('[data-context-menu]')) {
+        if (!target.closest('[data-context-menu]') && !target.closest('[data-context-preview]')) {
           setShowContextMenu(false);
         }
       }}
@@ -1100,6 +1100,35 @@ Question: ${threadChat.input}`;
           </div>
         )}
       </div>
+
+      {/* Context Preview Window - Shows selected text */}
+      {showContextMenu && (
+        <div 
+          data-context-preview
+          className="fixed bg-slate-900 border border-slate-500 rounded-lg shadow-2xl p-4 min-w-[300px] max-w-[500px] z-[99999]"
+          style={{ 
+            left: window.innerWidth / 2 - 150, // Center horizontally (300px min-width / 2)
+            top: window.innerHeight / 2 - 220,  // Position above the context menu
+            transform: 'translateZ(0)', // Force hardware acceleration for smooth positioning
+            pointerEvents: 'auto' // Ensure it can be clicked
+          }}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.preventDefault()} // Prevent text selection from being cleared
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-white">Selected Context</h4>
+            <div className="w-3 h-3 rounded-full bg-accent-yellow opacity-80"></div>
+          </div>
+          <div className="bg-slate-800/50 border border-slate-600/50 rounded-lg p-3 max-h-32 overflow-y-auto">
+            <div className="text-sm text-slate-200 leading-relaxed">
+              "{selectedText}"
+            </div>
+          </div>
+          <div className="mt-3 text-xs text-slate-400 text-center">
+            Choose an action below to create a thread with this context
+          </div>
+        </div>
+      )}
 
       {/* Context Menu - Always rendered at screen center when active */}
       {showContextMenu && (
