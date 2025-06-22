@@ -577,18 +577,15 @@ export default function ThreadedChat() {
         {/* Thread Header */}
         <div className={`flex-shrink-0 p-3 border-b-2 ${colorScheme.border} ${colorScheme.bg} shadow-sm`}>
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-white text-sm">{getActionLabel(thread.actionType)}</h3>
-              <span className={`text-xs ${colorScheme.badgeBg} ${colorScheme.badgeText} px-2 py-1 rounded-full border ${colorScheme.badgeBorder}`}>
+            <div className="flex items-center gap-3">
+              {/* Large, prominent thread number */}
+              <div className={`text-2xl font-bold ${colorScheme.badgeText} ${colorScheme.badgeBg} px-3 py-1 rounded-lg border-2 ${colorScheme.badgeBorder} shadow-md`}>
                 #{threads.findIndex(t => t.id === thread.id) + 1}
-              </span>
-              {/* Context Source Information - inline with thread number */}
+              </div>
+              {/* Action label */}
+              <h3 className="font-semibold text-white text-sm">{getActionLabel(thread.actionType)}</h3>
+              {/* Context Source Information */}
               <span className="font-semibold text-white text-sm">{getContextSource(thread)}</span>
-              {thread.rowId !== undefined && thread.rowId > 0 && (
-                <span className="text-xs bg-accent-purple/20 text-accent-purple px-2 py-1 rounded-full border border-accent-purple/30">
-                  Row {thread.rowId + 1}
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -598,7 +595,9 @@ export default function ThreadedChat() {
                 }`}
                 title={isExpanded ? 'Collapse thread' : 'Expand thread'}
               >
-                {isExpanded ? '📖' : '📑'}
+                <span className="text-xl font-bold">
+                  {isExpanded ? '←' : '→'}
+                </span>
               </button>
               <button
                 onClick={() => closeThread(thread.id)}
@@ -971,15 +970,17 @@ Question: ${threadChat.input}`;
                 </h1>
                 {hasActiveThreads && (
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => toggleThreadExpansion('main')}
-                      className={`p-2 rounded-lg hover:bg-hover transition-colors ${
-                        expandedThread === 'main' ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
-                      }`}
-                      title={expandedThread === 'main' ? 'Collapse main chat' : 'Expand main chat'}
-                    >
-                      {expandedThread === 'main' ? '📖' : '📑'}
-                    </button>
+                                <button
+              onClick={() => toggleThreadExpansion('main')}
+              className={`p-2 rounded-lg hover:bg-hover transition-colors ${
+                expandedThread === 'main' ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
+              }`}
+              title={expandedThread === 'main' ? 'Collapse main chat' : 'Expand main chat'}
+            >
+              <span className="text-xl font-bold">
+                {expandedThread === 'main' ? '←' : '→'}
+              </span>
+            </button>
                     {manualMainWidth !== null && (
                       <button
                         onClick={() => setManualMainWidth(null)}
