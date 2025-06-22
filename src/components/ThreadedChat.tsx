@@ -962,7 +962,7 @@ Question: ${threadChat.input}`;
 
   return (
     <div 
-      className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4" 
+      className="h-full p-4" 
       onClick={(e) => {
         // Only close context menu if clicking outside of it and the preview window
         if (!showContextMenu) return;
@@ -976,41 +976,42 @@ Question: ${threadChat.input}`;
         userSelect: showContextMenu ? 'none' : 'auto'
       }}
     >
-      <div className={`mx-auto h-[calc(100vh-2rem)] ${hasActiveThreads ? 'max-w-none w-full' : 'max-w-4xl'} bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700/50 shadow-2xl overflow-hidden flex`}>
+      <div className={`mx-auto h-full ${hasActiveThreads ? 'max-w-none w-full' : 'max-w-4xl'} bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700/50 shadow-2xl overflow-hidden flex`}>
         {/* Main chat area - dynamic width based on expansion state */}
         <div className={`${hasActiveThreads ? mainWidth : 'w-full'} flex flex-col transition-all duration-300 ${hasActiveThreads ? 'border-r-2 border-accent-blue/30 shadow-lg' : 'border-r border-transparent'} ${!hasActiveThreads ? 'rounded-xl' : 'rounded-l-xl'}`}>
           {/* Header with model selector */}
           <div className="border-b border-custom bg-card/80 backdrop-blur-sm p-4">
             <div className="mx-auto max-w-full px-4">
-              <div className="flex items-center justify-between mb-4">
-                <h1 className={`font-bold text-white ${expandedThread && expandedThread !== 'main' ? 'text-lg' : 'text-2xl'} transition-all duration-300`}>
-                  {expandedThread && expandedThread !== 'main' ? 'Main Chat' : 'AI Chat with Contextual Threading'}
-                </h1>
-                {hasActiveThreads && (
-                  <div className="flex items-center gap-2">
-                                <button
-              onClick={() => toggleThreadExpansion('main')}
-              className={`p-2 rounded-lg hover:bg-hover transition-colors ${
-                expandedThread === 'main' ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
-              }`}
-              title={expandedThread === 'main' ? 'Collapse main chat' : 'Expand main chat'}
-            >
-              <span className="text-xl font-bold">
-                {expandedThread === 'main' ? '←' : '→'}
-              </span>
-            </button>
-                    {manualMainWidth !== null && (
-                      <button
-                        onClick={() => setManualMainWidth(null)}
-                        className="p-1 text-xs bg-accent-orange/20 text-accent-orange hover:bg-accent-orange/30 rounded-lg transition-colors"
-                        title="Reset to automatic sizing"
-                      >
-                        🔄 Reset
-                      </button>
-                    )}
-                  </div>
-                )}
+              {hasActiveThreads && (
+                <div className="flex items-center justify-end gap-2 mb-4">
+                  <button
+                    onClick={() => toggleThreadExpansion('main')}
+                    className={`p-2 rounded-lg hover:bg-hover transition-colors ${
+                      expandedThread === 'main' ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
+                    }`}
+                    title={expandedThread === 'main' ? 'Collapse main chat' : 'Expand main chat'}
+                  >
+                    <span className="text-xl font-bold">
+                      {expandedThread === 'main' ? '←' : '→'}
+                    </span>
+                  </button>
+                  {manualMainWidth !== null && (
+                    <button
+                      onClick={() => setManualMainWidth(null)}
+                      className="p-1 text-xs bg-accent-orange/20 text-accent-orange hover:bg-accent-orange/30 rounded-lg transition-colors"
+                      title="Reset to automatic sizing"
+                    >
+                      🔄 Reset
+                    </button>
+                  )}
+                </div>
+              )}
+              
+              {/* DeepDive Header */}
+              <div className="text-center mb-1 -mt-10">
+                <h1 className="text-5xl font-bold text-white tracking-wide">DeepDive</h1>
               </div>
+              
               <ModelSelector />
               {hasActiveThreads && (
                 <div className="mt-2 text-sm text-muted">
