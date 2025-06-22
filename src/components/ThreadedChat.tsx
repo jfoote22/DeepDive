@@ -288,6 +288,7 @@ export default function ThreadedChat() {
 
   const gatherThreadContentByRows = (messageId: string, isFromThread: boolean = false, threadId?: string) => {
     let originalMessage = '';
+    let mainChatResponses: string[] = [];
     let threadRows: { 
       rowId: number; 
       threads: { 
@@ -298,7 +299,7 @@ export default function ThreadedChat() {
       }[] 
     }[] = [];
 
-    // Get the original message
+    // Get the original message and collect main chat responses
     if (isFromThread && threadId) {
       const thread = threads.find(t => t.id === threadId);
       if (thread) {
@@ -308,6 +309,15 @@ export default function ThreadedChat() {
       const message = mainChat.messages.find(m => m.id === messageId);
       if (message) {
         originalMessage = message.content;
+        
+        // Collect ALL main chat responses that came after this message
+        const messageIndex = mainChat.messages.findIndex(m => m.id === messageId);
+        if (messageIndex !== -1) {
+          mainChatResponses = mainChat.messages
+            .slice(messageIndex + 1) // Get messages after the original message
+            .filter(msg => msg.role === 'assistant') // Only AI responses
+            .map(msg => msg.content);
+        }
       }
     }
 
@@ -363,17 +373,29 @@ export default function ThreadedChat() {
       return count + countThreadTree(rootThread.id);
     }, 0);
 
-    return { originalMessage, threadRows, totalThreadCount };
+    return { originalMessage, mainChatResponses, threadRows, totalThreadCount };
   };
 
   // Function to create a content aggregation prompt for a single row
-  const createRowSynthesisPrompt = (originalMessage: string, rowThreads: { threadTitle: string; context: string; actionType: string; responses: string[] }[], rowNumber: number) => {
-    let prompt = `Please create a comprehensive content aggregation from Row ${rowNumber + 1} of our deep dive exploration.
+  const createRowSynthesisPrompt = (originalMessage: string, mainChatResponses: string[], rowThreads: { threadTitle: string; context: string; actionType: string; responses: string[] }[], rowNumber: number) => {
+    let prompt = `Please create a comprehensive content aggregation from our deep dive exploration.
 
 **Original Topic:** "${originalMessage}"
 
-**Content to Aggregate from Row ${rowNumber + 1}:**
-This row explored ${rowThreads.length} different aspect${rowThreads.length > 1 ? 's' : ''} and gathered the following information:
+**Main Chat Information:**
+`;
+
+    if (mainChatResponses.length > 0) {
+      prompt += `First, here are the AI responses from the main conversation:\n\n`;
+      mainChatResponses.forEach((response, index) => {
+        prompt += `Main Response ${index + 1}:\n${response}\n\n`;
+      });
+    } else {
+      prompt += `(No main chat responses to include)\n\n`;
+    }
+
+    prompt += `**Additional Thread Information from Row ${rowNumber + 1}:**
+This row explored ${rowThreads.length} different aspect${rowThreads.length > 1 ? 's' : ''} and gathered the following additional information:
 
 `;
 
@@ -387,28 +409,29 @@ This row explored ${rowThreads.length} different aspect${rowThreads.length > 1 ?
       
       if (thread.responses.length > 0) {
         thread.responses.forEach((response, respIndex) => {
-          prompt += `Content ${respIndex + 1}:\n${response}\n\n`;
+          prompt += `Thread Content ${respIndex + 1}:\n${response}\n\n`;
         });
       } else {
-        prompt += `(No responses collected yet)\n\n`;
+        prompt += `(No thread responses collected yet)\n\n`;
       }
     });
 
-    prompt += `\n**Please provide a comprehensive aggregation that:**
+    prompt += `\n**Please create a NEW comprehensive deep dive that:**
 
-1. **Consolidated Information:** Combine all the information above into a well-organized, comprehensive overview
-2. **Key Insights:** Extract and highlight the most important insights and findings
-3. **Organized Structure:** Present the information in a logical, easy-to-follow structure
-4. **Complete Coverage:** Ensure all valuable information from the threads above is incorporated
+1. **Combines ALL Information:** Merge the main chat responses with all thread information into one cohesive deep dive
+2. **Organized Structure:** Present everything in a logical, well-structured format with clear sections and headings
+3. **Complete Coverage:** Include all valuable insights from both main chat and thread explorations
+4. **Enhanced Detail:** Use the thread information to add depth and detail to the main chat foundation
+5. **Readable Format:** Create a comprehensive resource that can be read as a standalone deep dive document
 
-Present this as a complete, organized deep dive that aggregates all the information gathered, not a meta-analysis of the exploration process.`;
+Present this as a complete, new deep dive that integrates everything we've learned - essentially creating the definitive resource on this topic.`;
 
     return prompt;
   };
 
   // Function to create hierarchical synthesis thread
   const createSynthesisThread = (messageId: string, isFromThread: boolean = false, threadId?: string) => {
-    const { originalMessage, threadRows, totalThreadCount } = gatherThreadContentByRows(messageId, isFromThread, threadId);
+    const { originalMessage, mainChatResponses, threadRows, totalThreadCount } = gatherThreadContentByRows(messageId, isFromThread, threadId);
 
     if (threadRows.length === 0) {
       console.log('No thread content to synthesize');
@@ -419,7 +442,7 @@ Present this as a complete, organized deep dive that aggregates all the informat
 
     // If there's only one row, create a simple row synthesis
     if (threadRows.length === 1) {
-      synthesisPrompt = createRowSynthesisPrompt(originalMessage, threadRows[0].threads, 0);
+      synthesisPrompt = createRowSynthesisPrompt(originalMessage, mainChatResponses, threadRows[0].threads, 0);
     } else {
       // For multiple rows, create a comprehensive content aggregation
       synthesisPrompt = `Please create a comprehensive aggregation and synthesis of all information gathered from our deep dive exploration.
@@ -427,8 +450,20 @@ Present this as a complete, organized deep dive that aggregates all the informat
 **Original Topic:**
 "${originalMessage}"
 
-**Complete Information Collected:**
-Our exploration gathered information across ${threadRows.length} different investigation areas (${totalThreadCount} total threads). Here is all the content collected:
+**Main Chat Foundation:**
+`;
+
+      if (mainChatResponses.length > 0) {
+        synthesisPrompt += `Here are the foundational AI responses from the main conversation:\n\n`;
+        mainChatResponses.forEach((response, index) => {
+          synthesisPrompt += `Main Response ${index + 1}:\n${response}\n\n`;
+        });
+      } else {
+        synthesisPrompt += `(No main chat responses to include)\n\n`;
+      }
+
+      synthesisPrompt += `**Additional Thread Explorations:**
+Our exploration then expanded across ${threadRows.length} different investigation areas (${totalThreadCount} total threads) that added the following detailed information:
 
 `;
 
@@ -445,37 +480,42 @@ Our exploration gathered information across ${threadRows.length} different inves
           
           if (thread.responses.length > 0) {
             thread.responses.forEach((response, respIndex) => {
-              synthesisPrompt += `Content ${respIndex + 1}:\n${response}\n\n`;
+              synthesisPrompt += `Thread Content ${respIndex + 1}:\n${response}\n\n`;
             });
           } else {
-            synthesisPrompt += `(No responses collected yet)\n\n`;
+            synthesisPrompt += `(No thread responses collected yet)\n\n`;
           }
         });
       });
 
-      synthesisPrompt += `\n**Please provide a comprehensive deep dive that includes:**
+      synthesisPrompt += `\n**Please create a NEW comprehensive deep dive that:**
 
-**1. COMPLETE INFORMATION AGGREGATION**
-- Consolidate ALL the information above into a well-organized, comprehensive overview
-- Ensure no valuable insights or details are missed
-- Present the information in a logical, structured format
+**1. FOUNDATION + ENHANCEMENT**
+- Start with the main chat responses as your foundation
+- Use all the thread information to enhance, expand, and add depth to that foundation
+- Create one cohesive, comprehensive deep dive document
 
-**2. KEY INSIGHTS & FINDINGS**
-- Extract and highlight the most important insights from all the collected information
-- Identify significant patterns, themes, or connections that emerge
-- Present the core findings clearly and prominently
+**2. COMPLETE INTEGRATION**
+- Merge all information (main chat + all threads) into a single, well-organized resource
+- Ensure no valuable insights or details are missed from any source
+- Present everything in a logical, structured format with clear sections
 
-**3. ORGANIZED DEEP DIVE PRESENTATION**
-- Structure the aggregated information as a complete, organized deep dive
+**3. ENHANCED DETAIL & DEPTH**
+- Use the thread explorations to add much more detail and depth than the original main chat
+- Include specific examples, detailed explanations, and comprehensive coverage
+- Make it significantly more comprehensive than any individual piece
+
+**4. READABLE DEEP DIVE FORMAT**
+- Structure as a complete, standalone deep dive document
 - Use clear headings, sections, and formatting for easy navigation
-- Make it comprehensive yet accessible
+- Make it comprehensive yet accessible and easy to read through
 
-**4. EXECUTIVE SUMMARY**
-- Conclude with a high-level summary that captures the essence of everything learned
+**5. EXECUTIVE SUMMARY**
+- Conclude with a high-level summary that captures everything learned
 - Provide key takeaways and actionable insights
 - Give a concise overview of the complete understanding gained
 
-Present this as a complete, organized compilation of all the information gathered - essentially creating the definitive deep dive resource on this topic based on all our exploration.`;
+Present this as a completely NEW, comprehensive deep dive that integrates everything we've discovered - the definitive resource on this topic that combines the best of both main chat insights and detailed thread explorations.`;
     }
 
     // Add the synthesis prompt to the main chat instead of creating a new thread
