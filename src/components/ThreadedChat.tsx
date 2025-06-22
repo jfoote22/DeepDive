@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { useChat } from 'ai/react';
 import React from 'react';
 
@@ -49,7 +49,7 @@ function useThreadChat(selectedModel: ModelProvider, threadId: string) {
   });
 }
 
-export default function ThreadedChat() {
+const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   const [selectedModel, setSelectedModel] = useState<ModelProvider>('anthropic');
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -95,6 +95,133 @@ export default function ThreadedChat() {
       console.error('Main chat error:', error);
     },
   });
+
+  // Store references to thread chat instances for copying
+  const threadChatRefs = useRef<{[key: string]: any}>({});
+
+  // Function to expand all collapsed rows
+  const expandAllRows = () => {
+    const threadRowsData = getThreadRows();
+    const allRowIndices = threadRowsData.map((_, index) => index);
+    
+    // Clear all collapsed rows (expand everything)
+    setCollapsedRows(new Set());
+  };
+
+  // Function to copy all AI responses to clipboard
+  const copyAllAIResponses = async () => {
+    try {
+      // First, expand all rows to ensure all threads are visible
+      const hadCollapsedRows = collapsedRows.size > 0;
+      if (hadCollapsedRows) {
+        expandAllRows();
+        // Wait a moment for the UI to update and render all threads
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      let allResponses = '';
+      
+      // Add main chat AI responses
+      const mainAIResponses = mainChat.messages.filter(msg => msg.role === 'assistant');
+      if (mainAIResponses.length > 0) {
+        allResponses += '=== MAIN CHAT RESPONSES ===\n\n';
+        mainAIResponses.forEach((msg, index) => {
+          allResponses += `[Main Response ${index + 1}]\n${msg.content}\n\n`;
+        });
+      }
+      
+      // Add thread AI responses - now all should be rendered and accessible
+      if (threads.length > 0) {
+        allResponses += '=== THREAD RESPONSES ===\n\n';
+        
+        threads.forEach((thread, threadIndex) => {
+          // Find rendered messages in the DOM for this thread
+          const threadElement = document.querySelector(`[data-thread-id="${thread.id}"]`);
+          if (threadElement) {
+            const assistantMessages = threadElement.querySelectorAll('[data-role="assistant"]');
+            
+            if (assistantMessages.length > 0) {
+              allResponses += `--- Thread ${threadIndex + 1}: ${thread.title || 'Untitled'} ---\n`;
+              if (thread.selectedContext) {
+                allResponses += `Context: "${thread.selectedContext}"\n\n`;
+              }
+              
+              assistantMessages.forEach((msgElement, msgIndex) => {
+                const content = msgElement.textContent || '';
+                if (content.trim()) {
+                  // Remove the "Select text to create a new thread" text that appears at the end
+                  const cleanContent = content.replace(/Select text to create a new thread$/, '').trim();
+                  if (cleanContent) {
+                    allResponses += `[Thread ${threadIndex + 1} Response ${msgIndex + 1}]\n${cleanContent}\n\n`;
+                  }
+                }
+              });
+            } else {
+              // Thread exists but has no messages yet
+              allResponses += `--- Thread ${threadIndex + 1}: ${thread.title || 'Untitled'} ---\n`;
+              if (thread.selectedContext) {
+                allResponses += `Context: "${thread.selectedContext}"\n\n`;
+              }
+              allResponses += `[Thread ${threadIndex + 1}] No AI responses yet - conversation not started.\n\n`;
+            }
+          }
+        });
+      }
+      
+      if (allResponses.trim() === '' || allResponses.trim() === '=== MAIN CHAT RESPONSES ===') {
+        allResponses = 'No AI responses found to copy. Make sure you have had conversations with the AI first.';
+      }
+      
+      // Copy to clipboard
+      await navigator.clipboard.writeText(allResponses);
+      
+      // Show success feedback with more details
+      const threadCount = threads.length;
+      const mainResponseCount = mainChat.messages.filter(msg => msg.role === 'assistant').length;
+      console.log('All AI responses copied to clipboard!');
+      
+      const expandMessage = hadCollapsedRows ? '\n\n✨ Auto-expanded all collapsed rows to access all responses!' : '';
+      alert(`Copied to clipboard!\n- Main chat: ${mainResponseCount} responses\n- Threads: ${threadCount} threads${expandMessage}`);
+      
+    } catch (error) {
+      console.error('Failed to copy responses:', error);
+      alert('Failed to copy responses. Please try again.');
+    }
+  };
+
+  // Function to clear all threads and main chat for a fresh start
+  const clearAllAndStartFresh = () => {
+    // Clear all threads
+    setThreads([]);
+    
+    // Clear active thread
+    setActiveThreadId(null);
+    
+    // Clear main chat messages
+    mainChat.setMessages([]);
+    
+    // Clear any stored thread chat instances
+    setThreadChatInstances({});
+    
+    // Reset UI state
+    setExpandedThread('main');
+    setCollapsedRows(new Set());
+    setCollapsedContexts(new Set());
+    setManualMainWidth(null);
+    
+    // Clear context menu
+    setShowContextMenu(false);
+    setSelectedText('');
+    setSelectedMessageId('');
+    
+    console.log('🧹 Cleared all threads and main chat - fresh start!');
+  };
+
+  // Expose functions to parent component
+  useImperativeHandle(ref, () => ({
+    copyAllAIResponses,
+    clearAllAndStartFresh
+  }));
 
   const handleTextSelection = React.useCallback((messageId: string, isFromThread: boolean = false, threadId?: string) => {
     const selection = window.getSelection();
@@ -501,6 +628,38 @@ export default function ThreadedChat() {
     }
   };
 
+  // Utility function to convert URLs in text to clickable links
+  const linkifyText = (text: string) => {
+    // Regular expression to match URLs
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}(?:\/[^\s]*)?)/g;
+    
+    const parts = text.split(urlRegex);
+    
+    return parts.map((part, index) => {
+      if (urlRegex.test(part)) {
+        // Ensure the URL has a protocol
+        let href = part;
+        if (!part.startsWith('http://') && !part.startsWith('https://')) {
+          href = part.startsWith('www.') ? `https://${part}` : `https://${part}`;
+        }
+        
+        return (
+          <a
+            key={index}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-400 hover:text-blue-300 underline transition-colors duration-200"
+            onClick={(e) => e.stopPropagation()} // Prevent text selection when clicking links
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  };
+
   const MessageContent = React.memo(({ message, isThread = false, threadId }: { message: any, isThread?: boolean, threadId?: string }) => {
     const isUser = message.role === 'user';
     
@@ -519,9 +678,10 @@ export default function ThreadedChat() {
               : 'bg-card/80 text-white cursor-text select-text border-custom backdrop-blur-sm'
           }`}
           onMouseUp={handleMouseUp}
+          data-role={message.role}
         >
           <div className="whitespace-pre-wrap text-sm leading-relaxed">
-            {message.content}
+            {linkifyText(message.content)}
           </div>
           {!isUser && (
             <div className="mt-2 text-xs text-muted opacity-60">
@@ -590,7 +750,10 @@ export default function ThreadedChat() {
     const colorScheme = getActionColorScheme(thread.actionType);
     
     return (
-      <div className={`${threadPanelWidth} bg-card/60 backdrop-blur border-l-2 border-accent-blue/40 border-r border-custom shadow-lg flex flex-col h-full transition-all duration-300 ${isCollapsed || isMainExpanded ? 'min-w-80' : ''} rounded-lg overflow-hidden`}>
+      <div 
+        className={`${threadPanelWidth} bg-card/60 backdrop-blur border-l-2 border-accent-blue/40 border-r border-custom shadow-lg flex flex-col h-full transition-all duration-300 ${isCollapsed || isMainExpanded ? 'min-w-80' : ''} rounded-lg overflow-hidden`}
+        data-thread-id={thread.id}
+      >
         {/* Thread Header */}
         <div className={`flex-shrink-0 p-3 border-b-2 ${colorScheme.border} ${colorScheme.bg} shadow-sm`}>
           <div className="flex items-center justify-between">
@@ -1222,4 +1385,8 @@ Question: ${threadChat.input}`;
       )}
     </div>
   );
-} 
+});
+
+ThreadedChat.displayName = 'ThreadedChat';
+
+export default ThreadedChat; 
