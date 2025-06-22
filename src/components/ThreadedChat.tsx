@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChat } from 'ai/react';
 import React from 'react';
+import { chatSessionManager } from '../lib/chatSessions';
 
 export interface Message {
   id: string;
@@ -19,7 +20,7 @@ export interface Thread {
   title?: string;
   rowId?: number; // Track which row this thread belongs to
   sourceType?: 'main' | 'thread'; // Track if created from main chat or another thread
-  actionType?: 'ask' | 'details' | 'simplify' | 'examples'; // Track which context action was used
+  actionType?: 'ask' | 'details' | 'simplify' | 'examples' | 'synthesis'; // Track which context action was used
 }
 
 type ModelProvider = 'openai' | 'claude' | 'anthropic';
@@ -74,6 +75,11 @@ export default function ThreadedChat() {
   
   // Store chat instances for each thread - each thread gets its own isolated chat
   const [threadChatInstances, setThreadChatInstances] = useState<{[key: string]: any}>({});
+  
+  // Session management state
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [savedSessions, setSavedSessions] = useState(chatSessionManager.getAllSessions());
+  const [showSessionMenu, setShowSessionMenu] = useState(false);
 
   const getApiEndpoint = (model: ModelProvider) => {
     switch (model) {
@@ -124,7 +130,7 @@ export default function ThreadedChat() {
     console.log('Context menu should be showing'); // Debug log
   }, []);
 
-  const createNewThread = (context: string, autoExpand: boolean = false, autoSend: boolean = false, actionType: 'ask' | 'details' | 'simplify' | 'examples' = 'ask') => {
+  const createNewThread = (context: string, autoExpand: boolean = false, autoSend: boolean = false, actionType: 'ask' | 'details' | 'simplify' | 'examples' | 'synthesis' = 'ask') => {
     // Create a unique thread ID with timestamp and random component for complete uniqueness
     const newThreadId = `thread-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
@@ -146,6 +152,14 @@ export default function ThreadedChat() {
       const match = context.match(/"([^"]+)"/);
       if (match) {
         title = `🔍 Details: ${match[1].substring(0, 40)}${match[1].length > 40 ? '...' : ''}`;
+      }
+    } else if (context.includes('Based on the original topic and the detailed exploration')) {
+      // This is a synthesis thread
+      const originalTopicMatch = context.match(/\*\*Original Topic:\*\*\s*"([^"]+)"/);
+      if (originalTopicMatch) {
+        title = `🔗 Synthesis: ${originalTopicMatch[1].substring(0, 35)}${originalTopicMatch[1].length > 35 ? '...' : ''}`;
+      } else {
+        title = '🔗 Synthesis Summary';
       }
     } else {
       // If it's a question or statement, try to extract the key topic
@@ -250,8 +264,258 @@ export default function ThreadedChat() {
     if (activeThreadId === threadId) {
       setActiveThreadId(null);
     }
-    
+  };
 
+  // Function to gather all thread content for synthesis
+  const gatherThreadContent = (messageId: string, isFromThread: boolean = false, threadId?: string) => {
+    let originalMessage = '';
+    let allThreadContent: { threadTitle: string; messages: any[]; context: string }[] = [];
+
+    // Get the original message
+    if (isFromThread && threadId) {
+      // Find the thread's selected context
+      const thread = threads.find(t => t.id === threadId);
+      if (thread) {
+        originalMessage = thread.selectedContext || '';
+      }
+    } else {
+      // Get from main chat
+      const message = mainChat.messages.find(m => m.id === messageId);
+      if (message) {
+        originalMessage = message.content;
+      }
+    }
+
+    // Find all threads that originated from this message/thread
+    const relatedThreads = threads.filter(thread => {
+      if (isFromThread && threadId) {
+        return thread.parentThreadId === threadId;
+      } else {
+        return thread.sourceType === 'main' && !thread.parentThreadId;
+      }
+    });
+
+    // For now, we'll gather just the thread context and titles
+    // The actual thread messages would need to be accessed via individual chat instances
+    // which is complex with the current architecture
+    relatedThreads.forEach(thread => {
+      allThreadContent.push({
+        threadTitle: thread.title || 'Thread',
+        messages: [], // We'll populate this differently
+        context: thread.selectedContext || ''
+      });
+    });
+
+    return { originalMessage, allThreadContent, relatedThreadsCount: relatedThreads.length };
+  };
+
+  // Function to create synthesis thread
+  const createSynthesisThread = (messageId: string, isFromThread: boolean = false, threadId?: string) => {
+    const { originalMessage, allThreadContent, relatedThreadsCount } = gatherThreadContent(messageId, isFromThread, threadId);
+
+    if (allThreadContent.length === 0) {
+      console.log('No thread content to synthesize');
+      return;
+    }
+
+    // Create synthesis prompt
+    let synthesisPrompt = `Based on the original topic and the detailed exploration through ${relatedThreadsCount} threads, please provide a comprehensive synthesis summary.
+
+**Original Topic:**
+"${originalMessage}"
+
+**Deep Dive Exploration Areas:**
+`;
+
+    allThreadContent.forEach((thread, index) => {
+      synthesisPrompt += `\n**Thread ${index + 1}: ${thread.threadTitle}**\n`;
+      synthesisPrompt += `Context explored: "${thread.context}"\n`;
+      synthesisPrompt += `This thread focused on: ${thread.threadTitle.toLowerCase().replace(/^(🎯|📝|🔍|💬)\s*/, '')}\n\n`;
+    });
+
+    synthesisPrompt += `\n**Please analyze and synthesize:**
+
+Given that I've created ${relatedThreadsCount} different threads to explore various aspects of the original topic, please provide a comprehensive synthesis that:
+
+1. **Integrates all perspectives:** Connect the insights from the different exploration angles (details, examples, simplifications, questions, etc.)
+
+2. **Identifies key themes:** What are the most important concepts that emerged across multiple threads?
+
+3. **Provides actionable insights:** What are the main takeaways and practical implications?
+
+4. **Creates a coherent narrative:** Tie everything together into a unified understanding of the topic.
+
+5. **Highlights connections:** What patterns or relationships became clear through this multi-threaded exploration?
+
+Present this as a well-structured, comprehensive synthesis that captures the essence of the entire deep dive exploration. Make it clear how the different threads complemented each other to create a fuller understanding of the topic.`;
+
+    // Create the synthesis thread
+    createNewThread(synthesisPrompt, true, true, 'synthesis');
+  };
+
+  // Session management functions
+  const saveCurrentSession = () => {
+    const title = chatSessionManager.generateSessionTitle(mainChat.messages, threads);
+    const sessionId = chatSessionManager.saveSession({
+      title,
+      mainChatMessages: mainChat.messages,
+      threads: threads
+    });
+    
+    setCurrentSessionId(sessionId);
+    setSavedSessions(chatSessionManager.getAllSessions());
+    
+    // Show success message (you could use a toast library here)
+    console.log('Session saved:', sessionId);
+  };
+
+  const loadSession = (sessionId: string) => {
+    const session = chatSessionManager.getSession(sessionId);
+    if (!session) return;
+
+    // Clear current state
+    setThreads([]);
+    setActiveThreadId(null);
+    setExpandedThread('main');
+    
+    // Load session data
+    mainChat.setMessages(session.mainChatMessages);
+    setThreads(session.threads);
+    setCurrentSessionId(sessionId);
+    setShowSessionMenu(false);
+  };
+
+  const createShareableLink = () => {
+    if (!currentSessionId) {
+      // Save first if not already saved
+      saveCurrentSession();
+      return;
+    }
+    
+    try {
+      const shareUrl = chatSessionManager.createShareableLink(currentSessionId);
+      
+      // Copy to clipboard
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        console.log('Share link copied to clipboard:', shareUrl);
+        // You could show a toast notification here
+      });
+    } catch (error) {
+      console.error('Failed to create share link:', error);
+    }
+  };
+
+  const startNewSession = () => {
+    // Reset all state
+    setThreads([]);
+    setActiveThreadId(null);
+    setExpandedThread('main');
+    setCurrentSessionId(null);
+    mainChat.setMessages([]);
+    setShowSessionMenu(false);
+  };
+
+  const deleteSession = (sessionId: string) => {
+    chatSessionManager.deleteSession(sessionId);
+    setSavedSessions(chatSessionManager.getAllSessions());
+    
+    if (currentSessionId === sessionId) {
+      setCurrentSessionId(null);
+    }
+  };
+
+  const SessionMenu = () => {
+    if (!showSessionMenu) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div className="bg-slate-800 border border-slate-600 rounded-lg shadow-2xl w-96 max-h-96 overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 flex items-center justify-between">
+            <h3 className="text-lg font-bold text-white">Sessions</h3>
+            <button
+              onClick={() => setShowSessionMenu(false)}
+              className="text-white hover:text-gray-300 text-xl"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Actions */}
+          <div className="p-4 border-b border-slate-600">
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={saveCurrentSession}
+                className="bg-green-600 hover:bg-green-500 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                disabled={mainChat.messages.length === 0 && threads.length === 0}
+              >
+                <span>💾</span>
+                Save Current
+              </button>
+              <button
+                onClick={createShareableLink}
+                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                disabled={!currentSessionId && mainChat.messages.length === 0}
+              >
+                <span>🔗</span>
+                Share
+              </button>
+              <button
+                onClick={startNewSession}
+                className="bg-orange-600 hover:bg-orange-500 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                <span>✨</span>
+                New
+              </button>
+            </div>
+          </div>
+
+          {/* Saved Sessions List */}
+          <div className="p-4">
+            <h4 className="text-white font-medium mb-3">Saved Sessions ({savedSessions.length})</h4>
+            {savedSessions.length === 0 ? (
+              <p className="text-gray-400 text-sm text-center py-4">No saved sessions yet</p>
+            ) : (
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {savedSessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className={`p-3 rounded-lg border transition-colors cursor-pointer ${
+                      currentSessionId === session.id
+                        ? 'bg-blue-600/20 border-blue-500/50'
+                        : 'bg-slate-700/50 border-slate-600 hover:bg-slate-700'
+                    }`}
+                    onClick={() => loadSession(session.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-medium truncate">
+                          {session.title}
+                        </p>
+                        <p className="text-gray-400 text-xs mt-1">
+                          {new Date(session.updatedAt).toLocaleDateString()} • 
+                          {session.threads.length} threads
+                        </p>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteSession(session.id);
+                        }}
+                        className="text-gray-400 hover:text-red-400 ml-2 p-1"
+                        title="Delete session"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const ContextMenu = () => {
@@ -431,6 +695,8 @@ export default function ThreadedChat() {
         return 'Simplify this';
       case 'examples':
         return 'Give examples';
+      case 'synthesis':
+        return 'Synthesis Summary';
       default:
         return 'Thread';
     }
@@ -489,6 +755,15 @@ export default function ThreadedChat() {
           badgeText: 'text-white',
           badgeBorder: 'border-white/30'
         };
+      case 'synthesis':
+        return {
+          bg: 'bg-gradient-to-r from-yellow-600 to-amber-600',
+          border: 'border-yellow-500',
+          text: 'text-white',
+          badgeBg: 'bg-white/20',
+          badgeText: 'text-white',
+          badgeBorder: 'border-white/30'
+        };
       default:
         return {
           bg: 'bg-card/80',
@@ -510,23 +785,59 @@ export default function ThreadedChat() {
       }
     }, [message.id, isThread, threadId, isUser]);
     
+    // Check if this message has related threads (for synthesis button)
+    const hasRelatedThreads = React.useMemo(() => {
+      if (isUser) return false;
+      
+      if (isThread && threadId) {
+        // Check if this thread has child threads
+        return threads.some(thread => thread.parentThreadId === threadId);
+      } else {
+        // Check if this main chat message has threads
+        return threads.some(thread => thread.sourceType === 'main' && !thread.parentThreadId);
+      }
+    }, [isUser, isThread, threadId, threads, message.id]);
+    
     return (
       <div className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}>
-        <div
-          className={`max-w-4xl px-4 py-3 rounded-lg border ${
-            isUser
-              ? 'bg-accent-blue/20 text-white border-accent-blue/30 backdrop-blur-sm'
-              : 'bg-card/80 text-white cursor-text select-text border-custom backdrop-blur-sm'
-          }`}
-          onMouseUp={handleMouseUp}
-        >
-          <div className="whitespace-pre-wrap text-sm leading-relaxed">
-            {message.content}
-          </div>
-          {!isUser && (
-            <div className="mt-2 text-xs text-muted opacity-60">
-              Select text to create a new thread
+        <div className="flex flex-col items-end gap-2">
+          <div
+            className={`max-w-4xl px-4 py-3 rounded-lg border ${
+              isUser
+                ? 'bg-accent-blue/20 text-white border-accent-blue/30 backdrop-blur-sm'
+                : 'bg-card/80 text-white cursor-text select-text border-custom backdrop-blur-sm'
+            }`}
+            onMouseUp={handleMouseUp}
+          >
+            <div className="whitespace-pre-wrap text-sm leading-relaxed">
+              {message.content}
             </div>
+            {!isUser && (
+              <div className="mt-2 text-xs text-muted opacity-60">
+                Select text to create a new thread
+              </div>
+            )}
+          </div>
+          
+          {/* Synthesis Button - only show for AI messages that have related threads */}
+          {hasRelatedThreads && !isUser && (
+            <button
+              onClick={() => createSynthesisThread(message.id, isThread, threadId)}
+              className="bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 hover:to-amber-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg flex items-center gap-2 border border-yellow-500/50"
+              title="Create a synthesis summary of all related threads"
+            >
+              <span>🔗</span>
+              <span>Synthesize Threads</span>
+              <span className="bg-white/20 px-2 py-1 rounded text-xs">
+                {threads.filter(thread => {
+                  if (isThread && threadId) {
+                    return thread.parentThreadId === threadId;
+                  } else {
+                    return thread.sourceType === 'main' && !thread.parentThreadId;
+                  }
+                }).length} threads
+              </span>
+            </button>
           )}
         </div>
       </div>
@@ -1008,8 +1319,23 @@ Question: ${threadChat.input}`;
               )}
               
               {/* DeepDive Header */}
-              <div className="text-center mb-4 -mt-2">
+              <div className="text-center mb-4 -mt-2 relative">
                 <h1 className="text-5xl font-bold text-white tracking-wide">DeepDive</h1>
+                
+                {/* Sessions Button */}
+                <button
+                  onClick={() => setShowSessionMenu(true)}
+                  className="absolute top-0 right-4 bg-slate-700/80 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg flex items-center gap-2 border border-slate-600/50"
+                  title="Manage Sessions"
+                >
+                  <span>📁</span>
+                  <span>Sessions</span>
+                  {savedSessions.length > 0 && (
+                    <span className="bg-blue-600 text-white px-2 py-1 rounded-full text-xs min-w-[20px] text-center">
+                      {savedSessions.length}
+                    </span>
+                  )}
+                </button>
               </div>
               
               <ModelSelector />
@@ -1220,6 +1546,9 @@ Question: ${threadChat.input}`;
           </div>
         </div>
       )}
+
+      {/* Session Menu */}
+      <SessionMenu />
     </div>
   );
 } 
