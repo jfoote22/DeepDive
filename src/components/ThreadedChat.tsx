@@ -418,6 +418,20 @@ export default function ThreadedChat() {
     }
   };
 
+  // Helper function to get context source description
+  const getContextSource = (thread: Thread) => {
+    if (thread.sourceType === 'main') {
+      return 'Context from main chat';
+    } else if (thread.sourceType === 'thread' && thread.parentThreadId) {
+      // Find the parent thread to get its number
+      const parentThreadIndex = threads.findIndex(t => t.id === thread.parentThreadId);
+      if (parentThreadIndex !== -1) {
+        return `Context from thread ${parentThreadIndex + 1}`;
+      }
+    }
+    return 'Context from main chat'; // Default fallback
+  };
+
   // Helper function to get color scheme based on action type
   const getActionColorScheme = (actionType?: string) => {
     switch (actionType) {
@@ -590,6 +604,10 @@ export default function ThreadedChat() {
                 ×
               </button>
             </div>
+          </div>
+          {/* Context Source Information */}
+          <div className="mt-2 text-xs text-slate-300">
+            <span className="font-medium">{getContextSource(thread)}</span>
           </div>
           {thread.selectedContext && (
             <div className="mt-2 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border border-gray-200/20 rounded-lg text-xs">
