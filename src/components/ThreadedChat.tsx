@@ -1105,11 +1105,11 @@ Question: ${threadChat.input}`;
       {showContextMenu && (
         <div 
           data-context-preview
-          className="fixed bg-slate-800 border border-slate-600 rounded-lg shadow-2xl p-4 min-w-[300px] max-w-[500px] z-[99999]"
+          className="fixed bg-slate-800 border border-slate-600 rounded-lg shadow-2xl min-w-[300px] max-w-[500px] z-[100000]"
           style={{ 
-            left: window.innerWidth / 2 - 150, // Center horizontally (300px min-width / 2)
-            top: window.innerHeight / 2 - 260,  // Position further above the context menu
-            transform: 'translateZ(0)', // Force hardware acceleration for smooth positioning
+            left: '50%',
+            top: '35%', // Position in upper-middle of screen
+            transform: 'translate(-50%, -50%)', // Center both horizontally and vertically
             pointerEvents: 'auto' // Ensure it can be clicked
           }}
           onClick={(e) => e.stopPropagation()}
@@ -1135,9 +1135,9 @@ Question: ${threadChat.input}`;
           data-context-menu
           className="fixed bg-slate-800 border border-slate-600 rounded-lg shadow-2xl py-2 min-w-[240px] z-[99999]"
           style={{ 
-            left: window.innerWidth / 2 - 120, // Center horizontally (240px width / 2)
-            top: window.innerHeight / 2 - 140,  // Center vertically (approximate menu height / 2)
-            transform: 'translateZ(0)', // Force hardware acceleration for smooth positioning
+            left: '50%',
+            top: '55%', // Position below the preview window
+            transform: 'translate(-50%, -50%)', // Center both horizontally and vertically
             pointerEvents: 'auto' // Ensure it can be clicked
           }}
           onClick={(e) => e.stopPropagation()}
