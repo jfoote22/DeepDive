@@ -78,8 +78,13 @@ export default function ThreadedChat() {
   
   // Session management state
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [savedSessions, setSavedSessions] = useState(chatSessionManager.getAllSessions());
+  const [savedSessions, setSavedSessions] = useState<any[]>([]);
   const [showSessionMenu, setShowSessionMenu] = useState(false);
+
+  // Initialize sessions on client side
+  useEffect(() => {
+    setSavedSessions(chatSessionManager.getAllSessions());
+  }, []);
 
   const getApiEndpoint = (model: ModelProvider) => {
     switch (model) {
@@ -153,13 +158,21 @@ export default function ThreadedChat() {
       if (match) {
         title = `🔍 Details: ${match[1].substring(0, 40)}${match[1].length > 40 ? '...' : ''}`;
       }
-    } else if (context.includes('Based on the original topic and the detailed exploration')) {
+    } else if (context.includes('Based on the original topic and the detailed exploration') || context.includes('Based on the original topic and our systematic deep dive exploration')) {
       // This is a synthesis thread
       const originalTopicMatch = context.match(/\*\*Original Topic:\*\*\s*"([^"]+)"/);
+      const isHierarchical = context.includes('systematic deep dive exploration across');
+      const rowsMatch = context.match(/across (\d+) different investigation rows/);
+      
       if (originalTopicMatch) {
-        title = `🔗 Synthesis: ${originalTopicMatch[1].substring(0, 35)}${originalTopicMatch[1].length > 35 ? '...' : ''}`;
+        const topicPreview = originalTopicMatch[1].substring(0, 30) + (originalTopicMatch[1].length > 30 ? '...' : '');
+        if (isHierarchical && rowsMatch) {
+          title = `🔗 Multi-Row Synthesis (${rowsMatch[1]} rows): ${topicPreview}`;
+        } else {
+          title = `🔗 Synthesis: ${topicPreview}`;
+        }
       } else {
-        title = '🔗 Synthesis Summary';
+        title = isHierarchical ? '🔗 Multi-Row Synthesis' : '🔗 Synthesis Summary';
       }
     } else {
       // If it's a question or statement, try to extract the key topic
@@ -266,20 +279,18 @@ export default function ThreadedChat() {
     }
   };
 
-  // Function to gather all thread content for synthesis
-  const gatherThreadContent = (messageId: string, isFromThread: boolean = false, threadId?: string) => {
+  // Function to gather thread content by rows for hierarchical synthesis
+  const gatherThreadContentByRows = (messageId: string, isFromThread: boolean = false, threadId?: string) => {
     let originalMessage = '';
-    let allThreadContent: { threadTitle: string; messages: any[]; context: string }[] = [];
+    let threadRows: { rowId: number; threads: { threadTitle: string; context: string; actionType: string }[] }[] = [];
 
     // Get the original message
     if (isFromThread && threadId) {
-      // Find the thread's selected context
       const thread = threads.find(t => t.id === threadId);
       if (thread) {
         originalMessage = thread.selectedContext || '';
       }
     } else {
-      // Get from main chat
       const message = mainChat.messages.find(m => m.id === messageId);
       if (message) {
         originalMessage = message.content;
@@ -295,59 +306,125 @@ export default function ThreadedChat() {
       }
     });
 
-    // For now, we'll gather just the thread context and titles
-    // The actual thread messages would need to be accessed via individual chat instances
-    // which is complex with the current architecture
+    // Group threads by row
+    const rowGroups = new Map<number, typeof relatedThreads>();
     relatedThreads.forEach(thread => {
-      allThreadContent.push({
-        threadTitle: thread.title || 'Thread',
-        messages: [], // We'll populate this differently
-        context: thread.selectedContext || ''
+      const rowId = thread.rowId || 0;
+      if (!rowGroups.has(rowId)) {
+        rowGroups.set(rowId, []);
+      }
+      rowGroups.get(rowId)!.push(thread);
+    });
+
+    // Convert to structured format
+    Array.from(rowGroups.entries()).forEach(([rowId, rowThreads]) => {
+      threadRows.push({
+        rowId,
+        threads: rowThreads.map(thread => ({
+          threadTitle: thread.title || 'Thread',
+          context: thread.selectedContext || '',
+          actionType: thread.actionType || 'ask'
+        }))
       });
     });
 
-    return { originalMessage, allThreadContent, relatedThreadsCount: relatedThreads.length };
+    // Sort rows by rowId
+    threadRows.sort((a, b) => a.rowId - b.rowId);
+
+    return { originalMessage, threadRows, totalThreadCount: relatedThreads.length };
   };
 
-  // Function to create synthesis thread
-  const createSynthesisThread = (messageId: string, isFromThread: boolean = false, threadId?: string) => {
-    const { originalMessage, allThreadContent, relatedThreadsCount } = gatherThreadContent(messageId, isFromThread, threadId);
+  // Function to create a row-level synthesis prompt
+  const createRowSynthesisPrompt = (originalMessage: string, rowThreads: { threadTitle: string; context: string; actionType: string }[], rowNumber: number) => {
+    let prompt = `Please create a focused synthesis for Row ${rowNumber + 1} of our deep dive exploration.
 
-    if (allThreadContent.length === 0) {
+**Original Topic:** "${originalMessage}"
+
+**Row ${rowNumber + 1} Exploration Focus:**
+This row contains ${rowThreads.length} related thread${rowThreads.length > 1 ? 's' : ''} that explored:
+
+`;
+
+    rowThreads.forEach((thread, index) => {
+      const actionLabel = thread.actionType === 'ask' ? 'Questions about' :
+                         thread.actionType === 'details' ? 'Detailed analysis of' :
+                         thread.actionType === 'simplify' ? 'Simplified explanation of' :
+                         thread.actionType === 'examples' ? 'Examples related to' : 'Exploration of';
+      
+      prompt += `${index + 1}. **${actionLabel}:** "${thread.context}"\n`;
+    });
+
+    prompt += `\n**Please provide a concise synthesis that:**
+1. Summarizes the key insights from this specific exploration angle
+2. Identifies the main patterns or themes that emerged
+3. Highlights the most important takeaways from this row's investigation
+4. Keeps the focus tight and specific to this row's exploration
+
+This synthesis will be combined with other rows to create a comprehensive overview, so focus on what makes this row's exploration unique and valuable.`;
+
+    return prompt;
+  };
+
+  // Function to create hierarchical synthesis thread
+  const createSynthesisThread = (messageId: string, isFromThread: boolean = false, threadId?: string) => {
+    const { originalMessage, threadRows, totalThreadCount } = gatherThreadContentByRows(messageId, isFromThread, threadId);
+
+    if (threadRows.length === 0) {
       console.log('No thread content to synthesize');
       return;
     }
 
-    // Create synthesis prompt
-    let synthesisPrompt = `Based on the original topic and the detailed exploration through ${relatedThreadsCount} threads, please provide a comprehensive synthesis summary.
+    // If there's only one row, create a simple row synthesis
+    if (threadRows.length === 1) {
+      const rowPrompt = createRowSynthesisPrompt(originalMessage, threadRows[0].threads, 0);
+      createNewThread(rowPrompt, true, true, 'synthesis');
+      return;
+    }
+
+    // For multiple rows, create a comprehensive hierarchical synthesis
+    let synthesisPrompt = `Based on the original topic and our systematic deep dive exploration across ${threadRows.length} different investigation rows (${totalThreadCount} total threads), please provide a comprehensive hierarchical synthesis.
 
 **Original Topic:**
 "${originalMessage}"
 
-**Deep Dive Exploration Areas:**
+**Multi-Row Deep Dive Structure:**
+Our exploration was organized into ${threadRows.length} distinct investigation rows:
+
 `;
 
-    allThreadContent.forEach((thread, index) => {
-      synthesisPrompt += `\n**Thread ${index + 1}: ${thread.threadTitle}**\n`;
-      synthesisPrompt += `Context explored: "${thread.context}"\n`;
-      synthesisPrompt += `This thread focused on: ${thread.threadTitle.toLowerCase().replace(/^(🎯|📝|🔍|💬)\s*/, '')}\n\n`;
+    threadRows.forEach((row, rowIndex) => {
+      synthesisPrompt += `\n**Row ${rowIndex + 1} (${row.threads.length} thread${row.threads.length > 1 ? 's' : ''}):**\n`;
+      
+      row.threads.forEach((thread, threadIndex) => {
+        const actionLabel = thread.actionType === 'ask' ? 'Questions about' :
+                           thread.actionType === 'details' ? 'Detailed analysis of' :
+                           thread.actionType === 'simplify' ? 'Simplified explanation of' :
+                           thread.actionType === 'examples' ? 'Examples related to' : 'Exploration of';
+        
+        synthesisPrompt += `  ${threadIndex + 1}. ${actionLabel}: "${thread.context}"\n`;
+      });
     });
 
-    synthesisPrompt += `\n**Please analyze and synthesize:**
+    synthesisPrompt += `\n**Please provide a comprehensive hierarchical synthesis that:**
 
-Given that I've created ${relatedThreadsCount} different threads to explore various aspects of the original topic, please provide a comprehensive synthesis that:
+**LEVEL 1 - Row-by-Row Analysis:**
+For each of the ${threadRows.length} investigation rows above:
+- Synthesize the key insights from that row's specific exploration focus
+- Identify what unique perspective that row brought to understanding the topic
+- Highlight the most valuable discoveries from that investigation angle
 
-1. **Integrates all perspectives:** Connect the insights from the different exploration angles (details, examples, simplifications, questions, etc.)
+**LEVEL 2 - Cross-Row Integration:**
+- **Connect the Dots:** How do insights from different rows complement and build upon each other?
+- **Identify Patterns:** What themes or concepts emerged across multiple rows?
+- **Resolve Tensions:** Where different rows provided different perspectives, how do they reconcile?
 
-2. **Identifies key themes:** What are the most important concepts that emerged across multiple threads?
+**LEVEL 3 - Unified Understanding:**
+- **Comprehensive Summary:** A complete picture that integrates all ${totalThreadCount} threads of investigation
+- **Key Takeaways:** The most important insights that emerged from this systematic exploration
+- **Actionable Insights:** Practical implications and applications
+- **Knowledge Synthesis:** How this multi-faceted investigation created a deeper understanding than any single approach could have achieved
 
-3. **Provides actionable insights:** What are the main takeaways and practical implications?
-
-4. **Creates a coherent narrative:** Tie everything together into a unified understanding of the topic.
-
-5. **Highlights connections:** What patterns or relationships became clear through this multi-threaded exploration?
-
-Present this as a well-structured, comprehensive synthesis that captures the essence of the entire deep dive exploration. Make it clear how the different threads complemented each other to create a fuller understanding of the topic.`;
+Present this as a well-structured, comprehensive analysis that clearly shows how our systematic, multi-row exploration methodology led to a richer and more complete understanding of the topic.`;
 
     // Create the synthesis thread
     createNewThread(synthesisPrompt, true, true, 'synthesis');
@@ -820,25 +897,42 @@ Present this as a well-structured, comprehensive synthesis that captures the ess
           </div>
           
           {/* Synthesis Button - only show for AI messages that have related threads */}
-          {hasRelatedThreads && !isUser && (
-            <button
-              onClick={() => createSynthesisThread(message.id, isThread, threadId)}
-              className="bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 hover:to-amber-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg flex items-center gap-2 border border-yellow-500/50"
-              title="Create a synthesis summary of all related threads"
-            >
-              <span>🔗</span>
-              <span>Synthesize Threads</span>
-              <span className="bg-white/20 px-2 py-1 rounded text-xs">
-                {threads.filter(thread => {
-                  if (isThread && threadId) {
-                    return thread.parentThreadId === threadId;
-                  } else {
-                    return thread.sourceType === 'main' && !thread.parentThreadId;
-                  }
-                }).length} threads
-              </span>
-            </button>
-          )}
+          {hasRelatedThreads && !isUser && (() => {
+            // Calculate row and thread statistics for the button
+            const relatedThreads = threads.filter(thread => {
+              if (isThread && threadId) {
+                return thread.parentThreadId === threadId;
+              } else {
+                return thread.sourceType === 'main' && !thread.parentThreadId;
+              }
+            });
+            
+            const rowGroups = new Map<number, any[]>();
+            relatedThreads.forEach(thread => {
+              const rowId = thread.rowId || 0;
+              if (!rowGroups.has(rowId)) {
+                rowGroups.set(rowId, []);
+              }
+              rowGroups.get(rowId)!.push(thread);
+            });
+            
+            const rowCount = rowGroups.size;
+            const threadCount = relatedThreads.length;
+            
+            return (
+              <button
+                onClick={() => createSynthesisThread(message.id, isThread, threadId)}
+                className="bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 hover:to-amber-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg flex items-center gap-2 border border-yellow-500/50"
+                title={`Create a hierarchical synthesis of ${rowCount} row${rowCount > 1 ? 's' : ''} (${threadCount} total threads)`}
+              >
+                <span>🔗</span>
+                <span>Synthesize {rowCount > 1 ? 'Rows' : 'Threads'}</span>
+                <span className="bg-white/20 px-2 py-1 rounded text-xs">
+                  {rowCount > 1 ? `${rowCount} rows, ${threadCount} threads` : `${threadCount} threads`}
+                </span>
+              </button>
+            );
+          })()}
         </div>
       </div>
     );

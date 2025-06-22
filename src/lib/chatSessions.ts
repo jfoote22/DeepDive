@@ -22,6 +22,11 @@ class ChatSessionManager {
 
   // Save a chat session to localStorage
   saveSession(session: Omit<ChatSession, 'id' | 'createdAt' | 'updatedAt'>): string {
+    // Check if we're in a browser environment
+    if (typeof window === 'undefined') {
+      return '';
+    }
+    
     const sessions = this.getAllSessions();
     const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -41,6 +46,10 @@ class ChatSessionManager {
   // Get all saved sessions
   getAllSessions(): ChatSession[] {
     try {
+      // Check if we're in a browser environment
+      if (typeof window === 'undefined') {
+        return [];
+      }
       const stored = localStorage.getItem(this.STORAGE_KEY);
       return stored ? JSON.parse(stored) : [];
     } catch (error) {
@@ -112,6 +121,10 @@ class ChatSessionManager {
   // Get all shared sessions
   getAllSharedSessions(): ShareableSession[] {
     try {
+      // Check if we're in a browser environment
+      if (typeof window === 'undefined') {
+        return [];
+      }
       const stored = localStorage.getItem(this.SHARED_STORAGE_KEY);
       return stored ? JSON.parse(stored) : [];
     } catch (error) {
