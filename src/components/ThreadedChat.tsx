@@ -20,7 +20,7 @@ export interface Thread {
   title?: string;
   rowId?: number; // Track which row this thread belongs to
   sourceType?: 'main' | 'thread'; // Track if created from main chat or another thread
-  actionType?: 'ask' | 'details' | 'simplify' | 'examples' | 'synthesis'; // Track which context action was used
+  actionType?: 'ask' | 'details' | 'simplify' | 'examples'; // Track which context action was used
 }
 
 type ModelProvider = 'openai' | 'claude' | 'anthropic';
@@ -135,7 +135,7 @@ export default function ThreadedChat() {
     console.log('Context menu should be showing'); // Debug log
   }, []);
 
-  const createNewThread = (context: string, autoExpand: boolean = false, autoSend: boolean = false, actionType: 'ask' | 'details' | 'simplify' | 'examples' | 'synthesis' = 'ask') => {
+  const createNewThread = (context: string, autoExpand: boolean = false, autoSend: boolean = false, actionType: 'ask' | 'details' | 'simplify' | 'examples' = 'ask') => {
     // Create a unique thread ID with timestamp and random component for complete uniqueness
     const newThreadId = `thread-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
@@ -157,22 +157,6 @@ export default function ThreadedChat() {
       const match = context.match(/"([^"]+)"/);
       if (match) {
         title = `🔍 Details: ${match[1].substring(0, 40)}${match[1].length > 40 ? '...' : ''}`;
-      }
-    } else if (context.includes('Based on the original topic and the detailed exploration') || context.includes('Based on the original topic and our systematic deep dive exploration')) {
-      // This is a synthesis thread
-      const originalTopicMatch = context.match(/\*\*Original Topic:\*\*\s*"([^"]+)"/);
-      const isHierarchical = context.includes('systematic deep dive exploration across');
-      const rowsMatch = context.match(/across (\d+) different investigation rows/);
-      
-      if (originalTopicMatch) {
-        const topicPreview = originalTopicMatch[1].substring(0, 30) + (originalTopicMatch[1].length > 30 ? '...' : '');
-        if (isHierarchical && rowsMatch) {
-          title = `🔗 Multi-Row Synthesis (${rowsMatch[1]} rows): ${topicPreview}`;
-        } else {
-          title = `🔗 Synthesis: ${topicPreview}`;
-        }
-      } else {
-        title = isHierarchical ? '🔗 Multi-Row Synthesis' : '🔗 Synthesis Summary';
       }
     } else {
       // If it's a question or statement, try to extract the key topic
@@ -374,15 +358,14 @@ This synthesis will be combined with other rows to create a comprehensive overvi
       return;
     }
 
+    let synthesisPrompt = '';
+
     // If there's only one row, create a simple row synthesis
     if (threadRows.length === 1) {
-      const rowPrompt = createRowSynthesisPrompt(originalMessage, threadRows[0].threads, 0);
-      createNewThread(rowPrompt, true, true, 'synthesis');
-      return;
-    }
-
-    // For multiple rows, create a comprehensive hierarchical synthesis
-    let synthesisPrompt = `Based on the original topic and our systematic deep dive exploration across ${threadRows.length} different investigation rows (${totalThreadCount} total threads), please provide a comprehensive hierarchical synthesis.
+      synthesisPrompt = createRowSynthesisPrompt(originalMessage, threadRows[0].threads, 0);
+    } else {
+      // For multiple rows, create a comprehensive hierarchical synthesis
+      synthesisPrompt = `Based on the original topic and our systematic deep dive exploration across ${threadRows.length} different investigation rows (${totalThreadCount} total threads), please provide a comprehensive hierarchical synthesis.
 
 **Original Topic:**
 "${originalMessage}"
@@ -392,20 +375,20 @@ Our exploration was organized into ${threadRows.length} distinct investigation r
 
 `;
 
-    threadRows.forEach((row, rowIndex) => {
-      synthesisPrompt += `\n**Row ${rowIndex + 1} (${row.threads.length} thread${row.threads.length > 1 ? 's' : ''}):**\n`;
-      
-      row.threads.forEach((thread, threadIndex) => {
-        const actionLabel = thread.actionType === 'ask' ? 'Questions about' :
-                           thread.actionType === 'details' ? 'Detailed analysis of' :
-                           thread.actionType === 'simplify' ? 'Simplified explanation of' :
-                           thread.actionType === 'examples' ? 'Examples related to' : 'Exploration of';
+      threadRows.forEach((row, rowIndex) => {
+        synthesisPrompt += `\n**Row ${rowIndex + 1} (${row.threads.length} thread${row.threads.length > 1 ? 's' : ''}):**\n`;
         
-        synthesisPrompt += `  ${threadIndex + 1}. ${actionLabel}: "${thread.context}"\n`;
+        row.threads.forEach((thread, threadIndex) => {
+          const actionLabel = thread.actionType === 'ask' ? 'Questions about' :
+                             thread.actionType === 'details' ? 'Detailed analysis of' :
+                             thread.actionType === 'simplify' ? 'Simplified explanation of' :
+                             thread.actionType === 'examples' ? 'Examples related to' : 'Exploration of';
+          
+          synthesisPrompt += `  ${threadIndex + 1}. ${actionLabel}: "${thread.context}"\n`;
+        });
       });
-    });
 
-    synthesisPrompt += `\n**Please provide a comprehensive hierarchical synthesis that:**
+      synthesisPrompt += `\n**Please provide a comprehensive hierarchical synthesis that:**
 
 **LEVEL 1 - Row-by-Row Analysis:**
 For each of the ${threadRows.length} investigation rows above:
@@ -425,9 +408,13 @@ For each of the ${threadRows.length} investigation rows above:
 - **Knowledge Synthesis:** How this multi-faceted investigation created a deeper understanding than any single approach could have achieved
 
 Present this as a well-structured, comprehensive analysis that clearly shows how our systematic, multi-row exploration methodology led to a richer and more complete understanding of the topic.`;
+    }
 
-    // Create the synthesis thread
-    createNewThread(synthesisPrompt, true, true, 'synthesis');
+    // Add the synthesis prompt to the main chat instead of creating a new thread
+    mainChat.append({
+      role: 'user',
+      content: synthesisPrompt
+    });
   };
 
   // Session management functions
@@ -772,8 +759,7 @@ Present this as a well-structured, comprehensive analysis that clearly shows how
         return 'Simplify this';
       case 'examples':
         return 'Give examples';
-      case 'synthesis':
-        return 'Synthesis Summary';
+
       default:
         return 'Thread';
     }
@@ -832,15 +818,7 @@ Present this as a well-structured, comprehensive analysis that clearly shows how
           badgeText: 'text-white',
           badgeBorder: 'border-white/30'
         };
-      case 'synthesis':
-        return {
-          bg: 'bg-gradient-to-r from-yellow-600 to-amber-600',
-          border: 'border-yellow-500',
-          text: 'text-white',
-          badgeBg: 'bg-white/20',
-          badgeText: 'text-white',
-          badgeBorder: 'border-white/30'
-        };
+
       default:
         return {
           bg: 'bg-card/80',
@@ -919,19 +897,19 @@ Present this as a well-structured, comprehensive analysis that clearly shows how
             const rowCount = rowGroups.size;
             const threadCount = relatedThreads.length;
             
-            return (
-              <button
-                onClick={() => createSynthesisThread(message.id, isThread, threadId)}
-                className="bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 hover:to-amber-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg flex items-center gap-2 border border-yellow-500/50"
-                title={`Create a hierarchical synthesis of ${rowCount} row${rowCount > 1 ? 's' : ''} (${threadCount} total threads)`}
-              >
-                <span>🔗</span>
-                <span>Synthesize {rowCount > 1 ? 'Rows' : 'Threads'}</span>
-                <span className="bg-white/20 px-2 py-1 rounded text-xs">
-                  {rowCount > 1 ? `${rowCount} rows, ${threadCount} threads` : `${threadCount} threads`}
-                </span>
-              </button>
-            );
+                          return (
+                <button
+                  onClick={() => createSynthesisThread(message.id, isThread, threadId)}
+                  className="bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 hover:to-amber-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg flex items-center gap-2 border border-yellow-500/50"
+                  title={`Generate a synthesis summary in main chat from ${rowCount} row${rowCount > 1 ? 's' : ''} (${threadCount} total threads)`}
+                >
+                  <span>🔗</span>
+                  <span>Generate Synthesis</span>
+                  <span className="bg-white/20 px-2 py-1 rounded text-xs">
+                    {rowCount > 1 ? `${rowCount} rows, ${threadCount} threads` : `${threadCount} threads`}
+                  </span>
+                </button>
+              );
           })()}
         </div>
       </div>
