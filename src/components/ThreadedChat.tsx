@@ -264,6 +264,28 @@ export default function ThreadedChat() {
   };
 
   // Function to gather thread content by rows for hierarchical synthesis
+  // Recursive function to collect all responses from a thread and its descendants
+  const collectAllThreadResponses = (threadId: string, visited: Set<string> = new Set()): string[] => {
+    if (visited.has(threadId)) return []; // Prevent infinite loops
+    visited.add(threadId);
+
+    const thread = threads.find(t => t.id === threadId);
+    if (!thread) return [];
+
+    // Get all AI responses from this thread
+    const responses = thread.messages
+      .filter(msg => msg.role === 'assistant')
+      .map(msg => msg.content);
+
+    // Find all child threads and recursively collect their responses
+    const childThreads = threads.filter(t => t.parentThreadId === threadId);
+    const childResponses = childThreads.flatMap(childThread => 
+      collectAllThreadResponses(childThread.id, visited)
+    );
+
+    return [...responses, ...childResponses];
+  };
+
   const gatherThreadContentByRows = (messageId: string, isFromThread: boolean = false, threadId?: string) => {
     let originalMessage = '';
     let threadRows: { 
@@ -272,7 +294,7 @@ export default function ThreadedChat() {
         threadTitle: string; 
         context: string; 
         actionType: string;
-        responses: string[]; // Collect all AI responses from this thread
+        responses: string[]; // Collect all AI responses from this thread and its descendants
       }[] 
     }[] = [];
 
@@ -289,8 +311,8 @@ export default function ThreadedChat() {
       }
     }
 
-    // Find all threads that originated from this message/thread
-    const relatedThreads = threads.filter(thread => {
+    // Find all ROOT threads that originated from this message/thread (direct children only)
+    const rootThreads = threads.filter(thread => {
       if (isFromThread && threadId) {
         return thread.parentThreadId === threadId;
       } else {
@@ -298,9 +320,9 @@ export default function ThreadedChat() {
       }
     });
 
-    // Group threads by row
-    const rowGroups = new Map<number, typeof relatedThreads>();
-    relatedThreads.forEach(thread => {
+    // Group root threads by row
+    const rowGroups = new Map<number, typeof rootThreads>();
+    rootThreads.forEach(thread => {
       const rowId = thread.rowId || 0;
       if (!rowGroups.has(rowId)) {
         rowGroups.set(rowId, []);
@@ -308,21 +330,19 @@ export default function ThreadedChat() {
       rowGroups.get(rowId)!.push(thread);
     });
 
-    // Convert to structured format with actual thread content
+    // Convert to structured format with complete thread tree content
     Array.from(rowGroups.entries()).forEach(([rowId, rowThreads]) => {
       threadRows.push({
         rowId,
         threads: rowThreads.map(thread => {
-          // Extract all AI responses from this thread
-          const aiResponses = thread.messages
-            .filter(msg => msg.role === 'assistant')
-            .map(msg => msg.content);
+          // Collect ALL responses from this thread and its entire descendant tree
+          const allResponses = collectAllThreadResponses(thread.id);
 
           return {
             threadTitle: thread.title || 'Thread',
             context: thread.selectedContext || '',
             actionType: thread.actionType || 'ask',
-            responses: aiResponses
+            responses: allResponses
           };
         })
       });
@@ -331,7 +351,19 @@ export default function ThreadedChat() {
     // Sort rows by rowId
     threadRows.sort((a, b) => a.rowId - b.rowId);
 
-    return { originalMessage, threadRows, totalThreadCount: relatedThreads.length };
+    // Count total threads including all descendants
+    const totalThreadCount = rootThreads.reduce((count, rootThread) => {
+      const countThreadTree = (threadId: string, visited: Set<string> = new Set()): number => {
+        if (visited.has(threadId)) return 0;
+        visited.add(threadId);
+        
+        const childThreads = threads.filter(t => t.parentThreadId === threadId);
+        return 1 + childThreads.reduce((sum, child) => sum + countThreadTree(child.id, visited), 0);
+      };
+      return count + countThreadTree(rootThread.id);
+    }, 0);
+
+    return { originalMessage, threadRows, totalThreadCount };
   };
 
   // Function to create a content aggregation prompt for a single row
