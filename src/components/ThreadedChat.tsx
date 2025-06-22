@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChat } from 'ai/react';
 import React from 'react';
-import { chatSessionManager } from '../lib/chatSessions';
 
 export interface Message {
   id: string;
@@ -75,16 +74,6 @@ export default function ThreadedChat() {
   
   // Store chat instances for each thread - each thread gets its own isolated chat
   const [threadChatInstances, setThreadChatInstances] = useState<{[key: string]: any}>({});
-  
-  // Session management state
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [savedSessions, setSavedSessions] = useState<any[]>([]);
-  const [showSessionMenu, setShowSessionMenu] = useState(false);
-
-  // Initialize sessions on client side
-  useEffect(() => {
-    setSavedSessions(chatSessionManager.getAllSessions());
-  }, []);
 
   const getApiEndpoint = (model: ModelProvider) => {
     switch (model) {
@@ -261,433 +250,8 @@ export default function ThreadedChat() {
     if (activeThreadId === threadId) {
       setActiveThreadId(null);
     }
-  };
-
-  // Function to gather thread content by rows for hierarchical synthesis
-  // Recursive function to collect all responses from a thread and its descendants
-  const collectAllThreadResponses = (threadId: string, visited: Set<string> = new Set()): string[] => {
-    if (visited.has(threadId)) return []; // Prevent infinite loops
-    visited.add(threadId);
-
-    const thread = threads.find(t => t.id === threadId);
-    if (!thread) return [];
-
-    // Get all AI responses from this thread
-    const responses = thread.messages
-      .filter(msg => msg.role === 'assistant')
-      .map(msg => msg.content);
-
-    // Find all child threads and recursively collect their responses
-    const childThreads = threads.filter(t => t.parentThreadId === threadId);
-    const childResponses = childThreads.flatMap(childThread => 
-      collectAllThreadResponses(childThread.id, visited)
-    );
-
-    return [...responses, ...childResponses];
-  };
-
-  const gatherThreadContentByRows = (messageId: string, isFromThread: boolean = false, threadId?: string) => {
-    let originalMessage = '';
-    let mainChatResponses: string[] = [];
-    let threadRows: { 
-      rowId: number; 
-      threads: { 
-        threadTitle: string; 
-        context: string; 
-        actionType: string;
-        responses: string[]; // Collect all AI responses from this thread and its descendants
-      }[] 
-    }[] = [];
-
-    // Get the original message and collect main chat responses
-    if (isFromThread && threadId) {
-      const thread = threads.find(t => t.id === threadId);
-      if (thread) {
-        originalMessage = thread.selectedContext || '';
-      }
-    } else {
-      const message = mainChat.messages.find(m => m.id === messageId);
-      if (message) {
-        originalMessage = message.content;
-        
-        // Collect ALL main chat responses that came after this message
-        const messageIndex = mainChat.messages.findIndex(m => m.id === messageId);
-        if (messageIndex !== -1) {
-          mainChatResponses = mainChat.messages
-            .slice(messageIndex + 1) // Get messages after the original message
-            .filter(msg => msg.role === 'assistant') // Only AI responses
-            .map(msg => msg.content);
-        }
-      }
-    }
-
-    // Find all ROOT threads that originated from this message/thread (direct children only)
-    const rootThreads = threads.filter(thread => {
-      if (isFromThread && threadId) {
-        return thread.parentThreadId === threadId;
-      } else {
-        return thread.sourceType === 'main' && !thread.parentThreadId;
-      }
-    });
-
-    // Group root threads by row
-    const rowGroups = new Map<number, typeof rootThreads>();
-    rootThreads.forEach(thread => {
-      const rowId = thread.rowId || 0;
-      if (!rowGroups.has(rowId)) {
-        rowGroups.set(rowId, []);
-      }
-      rowGroups.get(rowId)!.push(thread);
-    });
-
-    // Convert to structured format with complete thread tree content
-    Array.from(rowGroups.entries()).forEach(([rowId, rowThreads]) => {
-      threadRows.push({
-        rowId,
-        threads: rowThreads.map(thread => {
-          // Collect ALL responses from this thread and its entire descendant tree
-          const allResponses = collectAllThreadResponses(thread.id);
-
-          return {
-            threadTitle: thread.title || 'Thread',
-            context: thread.selectedContext || '',
-            actionType: thread.actionType || 'ask',
-            responses: allResponses
-          };
-        })
-      });
-    });
-
-    // Sort rows by rowId
-    threadRows.sort((a, b) => a.rowId - b.rowId);
-
-    // Count total threads including all descendants
-    const totalThreadCount = rootThreads.reduce((count, rootThread) => {
-      const countThreadTree = (threadId: string, visited: Set<string> = new Set()): number => {
-        if (visited.has(threadId)) return 0;
-        visited.add(threadId);
-        
-        const childThreads = threads.filter(t => t.parentThreadId === threadId);
-        return 1 + childThreads.reduce((sum, child) => sum + countThreadTree(child.id, visited), 0);
-      };
-      return count + countThreadTree(rootThread.id);
-    }, 0);
-
-    return { originalMessage, mainChatResponses, threadRows, totalThreadCount };
-  };
-
-  // Function to create a content aggregation prompt for a single row
-  const createRowSynthesisPrompt = (originalMessage: string, mainChatResponses: string[], rowThreads: { threadTitle: string; context: string; actionType: string; responses: string[] }[], rowNumber: number) => {
-    let prompt = `Please create a comprehensive content aggregation from our deep dive exploration.
-
-**Original Topic:** "${originalMessage}"
-
-**Main Chat Information:**
-`;
-
-    if (mainChatResponses.length > 0) {
-      prompt += `First, here are the AI responses from the main conversation:\n\n`;
-      mainChatResponses.forEach((response, index) => {
-        prompt += `Main Response ${index + 1}:\n${response}\n\n`;
-      });
-    } else {
-      prompt += `(No main chat responses to include)\n\n`;
-    }
-
-    prompt += `**Additional Thread Information from Row ${rowNumber + 1}:**
-This row explored ${rowThreads.length} different aspect${rowThreads.length > 1 ? 's' : ''} and gathered the following additional information:
-
-`;
-
-    rowThreads.forEach((thread, index) => {
-      const actionLabel = thread.actionType === 'ask' ? 'Questions & Answers' :
-                         thread.actionType === 'details' ? 'Detailed Information' :
-                         thread.actionType === 'simplify' ? 'Simplified Explanations' :
-                         thread.actionType === 'examples' ? 'Examples & Cases' : 'Exploration Results';
-      
-      prompt += `\n**${index + 1}. ${actionLabel} - "${thread.context}"**\n`;
-      
-      if (thread.responses.length > 0) {
-        thread.responses.forEach((response, respIndex) => {
-          prompt += `Thread Content ${respIndex + 1}:\n${response}\n\n`;
-        });
-      } else {
-        prompt += `(No thread responses collected yet)\n\n`;
-      }
-    });
-
-    prompt += `\n**Please create a NEW comprehensive deep dive that:**
-
-1. **Combines ALL Information:** Merge the main chat responses with all thread information into one cohesive deep dive
-2. **Organized Structure:** Present everything in a logical, well-structured format with clear sections and headings
-3. **Complete Coverage:** Include all valuable insights from both main chat and thread explorations
-4. **Enhanced Detail:** Use the thread information to add depth and detail to the main chat foundation
-5. **Readable Format:** Create a comprehensive resource that can be read as a standalone deep dive document
-
-Present this as a complete, new deep dive that integrates everything we've learned - essentially creating the definitive resource on this topic.`;
-
-    return prompt;
-  };
-
-  // Function to create hierarchical synthesis thread
-  const createSynthesisThread = (messageId: string, isFromThread: boolean = false, threadId?: string) => {
-    const { originalMessage, mainChatResponses, threadRows, totalThreadCount } = gatherThreadContentByRows(messageId, isFromThread, threadId);
-
-    if (threadRows.length === 0) {
-      console.log('No thread content to synthesize');
-      return;
-    }
-
-    let synthesisPrompt = '';
-
-    // If there's only one row, create a simple row synthesis
-    if (threadRows.length === 1) {
-      synthesisPrompt = createRowSynthesisPrompt(originalMessage, mainChatResponses, threadRows[0].threads, 0);
-    } else {
-      // For multiple rows, create a comprehensive content aggregation
-      synthesisPrompt = `Please create a comprehensive aggregation and synthesis of all information gathered from our deep dive exploration.
-
-**Original Topic:**
-"${originalMessage}"
-
-**Main Chat Foundation:**
-`;
-
-      if (mainChatResponses.length > 0) {
-        synthesisPrompt += `Here are the foundational AI responses from the main conversation:\n\n`;
-        mainChatResponses.forEach((response, index) => {
-          synthesisPrompt += `Main Response ${index + 1}:\n${response}\n\n`;
-        });
-      } else {
-        synthesisPrompt += `(No main chat responses to include)\n\n`;
-      }
-
-      synthesisPrompt += `**Additional Thread Explorations:**
-Our exploration then expanded across ${threadRows.length} different investigation areas (${totalThreadCount} total threads) that added the following detailed information:
-
-`;
-
-      threadRows.forEach((row, rowIndex) => {
-        synthesisPrompt += `\n**Investigation Area ${rowIndex + 1} (${row.threads.length} thread${row.threads.length > 1 ? 's' : ''}):**\n`;
-        
-        row.threads.forEach((thread, threadIndex) => {
-          const actionLabel = thread.actionType === 'ask' ? 'Questions & Answers' :
-                             thread.actionType === 'details' ? 'Detailed Information' :
-                             thread.actionType === 'simplify' ? 'Simplified Explanations' :
-                             thread.actionType === 'examples' ? 'Examples & Cases' : 'Exploration Results';
-          
-          synthesisPrompt += `\n**${threadIndex + 1}. ${actionLabel} - "${thread.context}"**\n`;
-          
-          if (thread.responses.length > 0) {
-            thread.responses.forEach((response, respIndex) => {
-              synthesisPrompt += `Thread Content ${respIndex + 1}:\n${response}\n\n`;
-            });
-          } else {
-            synthesisPrompt += `(No thread responses collected yet)\n\n`;
-          }
-        });
-      });
-
-      synthesisPrompt += `\n**Please create a NEW comprehensive deep dive that:**
-
-**1. FOUNDATION + ENHANCEMENT**
-- Start with the main chat responses as your foundation
-- Use all the thread information to enhance, expand, and add depth to that foundation
-- Create one cohesive, comprehensive deep dive document
-
-**2. COMPLETE INTEGRATION**
-- Merge all information (main chat + all threads) into a single, well-organized resource
-- Ensure no valuable insights or details are missed from any source
-- Present everything in a logical, structured format with clear sections
-
-**3. ENHANCED DETAIL & DEPTH**
-- Use the thread explorations to add much more detail and depth than the original main chat
-- Include specific examples, detailed explanations, and comprehensive coverage
-- Make it significantly more comprehensive than any individual piece
-
-**4. READABLE DEEP DIVE FORMAT**
-- Structure as a complete, standalone deep dive document
-- Use clear headings, sections, and formatting for easy navigation
-- Make it comprehensive yet accessible and easy to read through
-
-**5. EXECUTIVE SUMMARY**
-- Conclude with a high-level summary that captures everything learned
-- Provide key takeaways and actionable insights
-- Give a concise overview of the complete understanding gained
-
-Present this as a completely NEW, comprehensive deep dive that integrates everything we've discovered - the definitive resource on this topic that combines the best of both main chat insights and detailed thread explorations.`;
-    }
-
-    // Add the synthesis prompt to the main chat instead of creating a new thread
-    mainChat.append({
-      role: 'user',
-      content: synthesisPrompt
-    });
-  };
-
-  // Session management functions
-  const saveCurrentSession = () => {
-    const title = chatSessionManager.generateSessionTitle(mainChat.messages, threads);
-    const sessionId = chatSessionManager.saveSession({
-      title,
-      mainChatMessages: mainChat.messages,
-      threads: threads
-    });
     
-    setCurrentSessionId(sessionId);
-    setSavedSessions(chatSessionManager.getAllSessions());
-    
-    // Show success message (you could use a toast library here)
-    console.log('Session saved:', sessionId);
-  };
 
-  const loadSession = (sessionId: string) => {
-    const session = chatSessionManager.getSession(sessionId);
-    if (!session) return;
-
-    // Clear current state
-    setThreads([]);
-    setActiveThreadId(null);
-    setExpandedThread('main');
-    
-    // Load session data
-    mainChat.setMessages(session.mainChatMessages);
-    setThreads(session.threads);
-    setCurrentSessionId(sessionId);
-    setShowSessionMenu(false);
-  };
-
-  const createShareableLink = () => {
-    if (!currentSessionId) {
-      // Save first if not already saved
-      saveCurrentSession();
-      return;
-    }
-    
-    try {
-      const shareUrl = chatSessionManager.createShareableLink(currentSessionId);
-      
-      // Copy to clipboard
-      navigator.clipboard.writeText(shareUrl).then(() => {
-        console.log('Share link copied to clipboard:', shareUrl);
-        // You could show a toast notification here
-      });
-    } catch (error) {
-      console.error('Failed to create share link:', error);
-    }
-  };
-
-  const startNewSession = () => {
-    // Reset all state
-    setThreads([]);
-    setActiveThreadId(null);
-    setExpandedThread('main');
-    setCurrentSessionId(null);
-    mainChat.setMessages([]);
-    setShowSessionMenu(false);
-  };
-
-  const deleteSession = (sessionId: string) => {
-    chatSessionManager.deleteSession(sessionId);
-    setSavedSessions(chatSessionManager.getAllSessions());
-    
-    if (currentSessionId === sessionId) {
-      setCurrentSessionId(null);
-    }
-  };
-
-  const SessionMenu = () => {
-    if (!showSessionMenu) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
-        <div className="bg-slate-800 border border-slate-600 rounded-lg shadow-2xl w-96 max-h-96 overflow-hidden">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 flex items-center justify-between">
-            <h3 className="text-lg font-bold text-white">Sessions</h3>
-            <button
-              onClick={() => setShowSessionMenu(false)}
-              className="text-white hover:text-gray-300 text-xl"
-            >
-              ×
-            </button>
-          </div>
-
-          {/* Actions */}
-          <div className="p-4 border-b border-slate-600">
-            <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={saveCurrentSession}
-                className="bg-green-600 hover:bg-green-500 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-                disabled={mainChat.messages.length === 0 && threads.length === 0}
-              >
-                <span>💾</span>
-                Save Current
-              </button>
-              <button
-                onClick={createShareableLink}
-                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-                disabled={!currentSessionId && mainChat.messages.length === 0}
-              >
-                <span>🔗</span>
-                Share
-              </button>
-              <button
-                onClick={startNewSession}
-                className="bg-orange-600 hover:bg-orange-500 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-              >
-                <span>✨</span>
-                New
-              </button>
-            </div>
-          </div>
-
-          {/* Saved Sessions List */}
-          <div className="p-4">
-            <h4 className="text-white font-medium mb-3">Saved Sessions ({savedSessions.length})</h4>
-            {savedSessions.length === 0 ? (
-              <p className="text-gray-400 text-sm text-center py-4">No saved sessions yet</p>
-            ) : (
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {savedSessions.map((session) => (
-                  <div
-                    key={session.id}
-                    className={`p-3 rounded-lg border transition-colors cursor-pointer ${
-                      currentSessionId === session.id
-                        ? 'bg-blue-600/20 border-blue-500/50'
-                        : 'bg-slate-700/50 border-slate-600 hover:bg-slate-700'
-                    }`}
-                    onClick={() => loadSession(session.id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium truncate">
-                          {session.title}
-                        </p>
-                        <p className="text-gray-400 text-xs mt-1">
-                          {new Date(session.updatedAt).toLocaleDateString()} • 
-                          {session.threads.length} threads
-                        </p>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteSession(session.id);
-                        }}
-                        className="text-gray-400 hover:text-red-400 ml-2 p-1"
-                        title="Delete session"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
   };
 
   const ContextMenu = () => {
@@ -867,7 +431,6 @@ Present this as a completely NEW, comprehensive deep dive that integrates everyt
         return 'Simplify this';
       case 'examples':
         return 'Give examples';
-
       default:
         return 'Thread';
     }
@@ -926,7 +489,6 @@ Present this as a completely NEW, comprehensive deep dive that integrates everyt
           badgeText: 'text-white',
           badgeBorder: 'border-white/30'
         };
-
       default:
         return {
           bg: 'bg-card/80',
@@ -948,22 +510,8 @@ Present this as a completely NEW, comprehensive deep dive that integrates everyt
       }
     }, [message.id, isThread, threadId, isUser]);
     
-    // Check if this message has related threads (for synthesis button)
-    const hasRelatedThreads = React.useMemo(() => {
-      if (isUser) return false;
-      
-      if (isThread && threadId) {
-        // Check if this thread has child threads
-        return threads.some(thread => thread.parentThreadId === threadId);
-      } else {
-        // Check if this main chat message has threads
-        return threads.some(thread => thread.sourceType === 'main' && !thread.parentThreadId);
-      }
-    }, [isUser, isThread, threadId, threads, message.id]);
-    
     return (
       <div className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}>
-        <div className="flex flex-col items-end gap-2">
         <div
           className={`max-w-4xl px-4 py-3 rounded-lg border ${
             isUser
@@ -980,56 +528,6 @@ Present this as a completely NEW, comprehensive deep dive that integrates everyt
               Select text to create a new thread
             </div>
           )}
-          </div>
-          
-          {/* Synthesis Button - only show for AI messages that have related threads */}
-          {hasRelatedThreads && !isUser && (() => {
-            // Calculate row and thread statistics for the button
-            const relatedThreads = threads.filter(thread => {
-              if (isThread && threadId) {
-                return thread.parentThreadId === threadId;
-              } else {
-                return thread.sourceType === 'main' && !thread.parentThreadId;
-              }
-            });
-            
-            const rowGroups = new Map<number, any[]>();
-            relatedThreads.forEach(thread => {
-              const rowId = thread.rowId || 0;
-              if (!rowGroups.has(rowId)) {
-                rowGroups.set(rowId, []);
-              }
-              rowGroups.get(rowId)!.push(thread);
-            });
-            
-            const rowCount = rowGroups.size;
-            
-            // Count total threads including all descendants (same logic as gatherThreadContentByRows)
-            const totalThreadCount = relatedThreads.reduce((count, rootThread) => {
-              const countThreadTree = (threadId: string, visited: Set<string> = new Set()): number => {
-                if (visited.has(threadId)) return 0;
-                visited.add(threadId);
-                
-                const childThreads = threads.filter(t => t.parentThreadId === threadId);
-                return 1 + childThreads.reduce((sum, child) => sum + countThreadTree(child.id, visited), 0);
-              };
-              return count + countThreadTree(rootThread.id);
-            }, 0);
-            
-                          return (
-                <button
-                  onClick={() => createSynthesisThread(message.id, isThread, threadId)}
-                  className="bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 hover:to-amber-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg flex items-center gap-2 border border-yellow-500/50"
-                  title={`Generate a synthesis summary in main chat from ${rowCount} row${rowCount > 1 ? 's' : ''} (${totalThreadCount} total threads)`}
-                >
-                  <span>🔗</span>
-                  <span>Generate Synthesis</span>
-                  <span className="bg-white/20 px-2 py-1 rounded text-xs">
-                    {rowCount > 1 ? `${rowCount} rows, ${totalThreadCount} threads` : `${totalThreadCount} threads`}
-                  </span>
-                </button>
-              );
-          })()}
         </div>
       </div>
     );
@@ -1484,57 +982,42 @@ Question: ${threadChat.input}`;
           {/* Header with model selector */}
           <div className="border-b border-custom bg-card/80 backdrop-blur-sm p-4">
             <div className="mx-auto max-w-full px-4">
-                {hasActiveThreads && (
+              {hasActiveThreads && (
                 <div className="flex items-center justify-end gap-2 mb-4">
-                                <button
-              onClick={() => toggleThreadExpansion('main')}
-              className={`p-2 rounded-lg hover:bg-hover transition-colors ${
-                expandedThread === 'main' ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
-              }`}
-              title={expandedThread === 'main' ? 'Collapse main chat' : 'Expand main chat'}
-            >
-              <span className="text-xl font-bold">
-                {expandedThread === 'main' ? '←' : '→'}
-              </span>
-            </button>
-                    {manualMainWidth !== null && (
-                      <button
-                        onClick={() => setManualMainWidth(null)}
-                        className="p-1 text-xs bg-accent-orange/20 text-accent-orange hover:bg-accent-orange/30 rounded-lg transition-colors"
-                        title="Reset to automatic sizing"
-                      >
-                        🔄 Reset
-                      </button>
-                    )}
-                  </div>
-                )}
+                  <button
+                    onClick={() => toggleThreadExpansion('main')}
+                    className={`p-2 rounded-lg hover:bg-hover transition-colors ${
+                      expandedThread === 'main' ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
+                    }`}
+                    title={expandedThread === 'main' ? 'Collapse main chat' : 'Expand main chat'}
+                  >
+                    <span className="text-xl font-bold">
+                      {expandedThread === 'main' ? '←' : '→'}
+                    </span>
+                  </button>
+                  {manualMainWidth !== null && (
+                    <button
+                      onClick={() => setManualMainWidth(null)}
+                      className="p-1 text-xs bg-accent-orange/20 text-accent-orange hover:bg-accent-orange/30 rounded-lg transition-colors"
+                      title="Reset to automatic sizing"
+                    >
+                      🔄 Reset
+                    </button>
+                  )}
+                </div>
+              )}
               
               {/* DeepDive Header */}
-              <div className="text-center mb-4 -mt-2 relative">
+              <div className="text-center mb-4 -mt-2">
                 <h1 className="text-5xl font-bold text-white tracking-wide">DeepDive</h1>
-                
-                {/* Sessions Button */}
-                <button
-                  onClick={() => setShowSessionMenu(true)}
-                  className="absolute top-0 right-4 bg-slate-700/80 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg flex items-center gap-2 border border-slate-600/50"
-                  title="Manage Sessions"
-                >
-                  <span>📁</span>
-                  <span>Sessions</span>
-                  {savedSessions.length > 0 && (
-                    <span className="bg-blue-600 text-white px-2 py-1 rounded-full text-xs min-w-[20px] text-center">
-                      {savedSessions.length}
-                    </span>
-                  )}
-                </button>
               </div>
               
               <ModelSelector />
               {hasActiveThreads && (
                 <div className="mt-2 text-sm text-muted">
                   💡 Select text in any AI response to create contextual threads - drill deeper into topics!
-                    </div>
-                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1737,9 +1220,6 @@ Question: ${threadChat.input}`;
           </div>
         </div>
       )}
-
-      {/* Session Menu */}
-      <SessionMenu />
     </div>
   );
 } 
