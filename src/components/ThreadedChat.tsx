@@ -69,7 +69,7 @@ export default function ThreadedChat() {
   const [startWidth, setStartWidth] = useState(0);
   // Row collapse state
   const [collapsedRows, setCollapsedRows] = useState<Set<number>>(new Set());
-  // Context collapse state
+  // Context collapse state - start with all contexts collapsed by default
   const [collapsedContexts, setCollapsedContexts] = useState<Set<string>>(new Set());
   
   // Store chat instances for each thread - each thread gets its own isolated chat
@@ -96,7 +96,7 @@ export default function ThreadedChat() {
     },
   });
 
-  const handleTextSelection = (messageId: string, isFromThread: boolean = false, threadId?: string) => {
+  const handleTextSelection = React.useCallback((messageId: string, isFromThread: boolean = false, threadId?: string) => {
     const selection = window.getSelection();
     if (!selection || selection.toString().trim().length === 0) {
       setShowContextMenu(false);
@@ -131,7 +131,7 @@ export default function ThreadedChat() {
     
     setContextMenuPosition({ x: xPos, y: yPos });
     setShowContextMenu(true);
-  };
+  }, []);
 
   const createNewThread = (context: string, autoExpand: boolean = false, autoSend: boolean = false, actionType: 'ask' | 'details' | 'simplify' | 'examples' = 'ask') => {
     // Create a unique thread ID with timestamp and random component for complete uniqueness
@@ -452,18 +452,24 @@ export default function ThreadedChat() {
     }
   };
 
-  const MessageContent = ({ message, isThread = false, threadId }: { message: any, isThread?: boolean, threadId?: string }) => {
+  const MessageContent = React.memo(({ message, isThread = false, threadId }: { message: any, isThread?: boolean, threadId?: string }) => {
     const isUser = message.role === 'user';
     
+    const handleMouseUp = React.useCallback(() => {
+      if (!isUser) {
+        handleTextSelection(message.id, isThread, threadId);
+      }
+    }, [message.id, isThread, threadId, isUser]);
+    
     return (
-      <div className={`flex ${isUser ? 'justify-start' : 'justify-end'} slide-in`}>
+      <div className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}>
         <div
-          className={`max-w-4xl px-4 py-3 rounded-lg border transition-all duration-200 ${
+          className={`max-w-4xl px-4 py-3 rounded-lg border ${
             isUser
               ? 'bg-accent-blue/20 text-white border-accent-blue/30 backdrop-blur-sm'
-              : 'bg-card/80 text-white cursor-text select-text border-custom hover:bg-card/90 backdrop-blur-sm'
+              : 'bg-card/80 text-white cursor-text select-text border-custom backdrop-blur-sm'
           }`}
-          onMouseUp={() => !isUser && handleTextSelection(message.id, isThread, threadId)}
+          onMouseUp={handleMouseUp}
         >
           <div className="whitespace-pre-wrap text-sm leading-relaxed">
             {message.content}
@@ -476,7 +482,7 @@ export default function ThreadedChat() {
         </div>
       </div>
     );
-  };
+  });
 
   const ThreadPanel = ({ thread }: { thread: Thread }) => {
     // Create a dedicated, isolated chat instance for this specific thread
@@ -535,9 +541,9 @@ export default function ThreadedChat() {
     const colorScheme = getActionColorScheme(thread.actionType);
     
     return (
-      <div className={`${threadPanelWidth} bg-card/60 backdrop-blur border-l-2 border-accent-blue/40 border-r border-custom shadow-lg flex flex-col h-full transition-all duration-300 ${isCollapsed || isMainExpanded ? 'min-w-80' : ''} slide-in mx-1`}>
+      <div className={`${threadPanelWidth} bg-card/60 backdrop-blur border-l-2 border-accent-blue/40 border-r border-custom shadow-lg flex flex-col h-full transition-all duration-300 ${isCollapsed || isMainExpanded ? 'min-w-80' : ''} rounded-lg overflow-hidden`}>
         {/* Thread Header */}
-        <div className={`p-4 border-b-2 ${colorScheme.border} ${colorScheme.bg} shadow-sm`}>
+        <div className={`flex-shrink-0 p-3 border-b-2 ${colorScheme.border} ${colorScheme.bg} shadow-sm`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-white text-sm">Thread</h3>
@@ -577,7 +583,7 @@ export default function ThreadedChat() {
                 <div className="font-medium text-accent-yellow">Context:</div>
                 <button className="text-accent-yellow hover:text-accent-yellow/80 transition-colors">
                   <svg 
-                    className={`w-4 h-4 transition-transform duration-200 ${collapsedContexts.has(thread.id) ? 'rotate-0' : 'rotate-180'}`} 
+                    className={`w-4 h-4 transition-transform duration-200 ${collapsedContexts.has(thread.id) ? 'rotate-180' : 'rotate-0'}`} 
                     fill="none" 
                     stroke="currentColor" 
                     viewBox="0 0 24 24"
@@ -586,7 +592,7 @@ export default function ThreadedChat() {
                   </svg>
                 </button>
               </div>
-              {!collapsedContexts.has(thread.id) && (
+              {collapsedContexts.has(thread.id) && (
                 <div className="px-3 pb-3">
                   <div className="text-accent-yellow/90 italic bg-slate-800/30 p-2 rounded">&quot;{thread.selectedContext}&quot;</div>
                 </div>
@@ -596,7 +602,7 @@ export default function ThreadedChat() {
         </div>
 
         {/* Thread Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gradient-to-b from-transparent to-slate-900/10">
+        <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-gradient-to-b from-transparent to-slate-900/10 min-h-0">
           {threadChat.messages.length === 0 && (
             <div className="text-center text-muted text-sm py-8">
               <div className="mb-2">💭</div>
@@ -628,7 +634,7 @@ export default function ThreadedChat() {
         </div>
 
         {/* Thread Input */}
-        <div className="border-t border-custom p-4 bg-card/40 backdrop-blur-sm">
+        <div className="flex-shrink-0 border-t border-custom p-3 bg-card/40 backdrop-blur-sm">
           <ChatInput 
             isThread={true}
             onSubmit={(e: any) => {
@@ -800,7 +806,7 @@ Question: ${threadChat.input}`;
     if (isCollapsed) {
       // Collapsed view - thin horizontal bar with color indicators and context previews
       return (
-        <div className="flex-shrink-0 h-16 bg-card/40 border border-custom rounded-lg mx-2 mb-2 transition-all duration-300">
+        <div className="flex-shrink-0 h-16 bg-card/40 border border-custom rounded-lg transition-all duration-300">
           <div className="flex items-center justify-between h-full px-4">
             <div className="flex items-center gap-3">
               <button
@@ -848,25 +854,33 @@ Question: ${threadChat.input}`;
 
     // Expanded view - full thread panels with collapse button
     return (
-      <div className="flex flex-1 min-h-0 relative">
+      <div className="h-full flex flex-col relative">
         {/* Row header with collapse button */}
-        <div className="absolute -top-8 left-2 z-10 flex items-center gap-2">
-          <button
-            onClick={() => toggleRowCollapse(rowIndex)}
-            className="text-accent-blue hover:text-accent-blue/80 transition-colors bg-card/60 backdrop-blur-sm rounded-lg px-2 py-1 border border-custom"
-            title="Collapse row"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-            </svg>
-          </button>
-          <span className="text-xs text-muted bg-card/60 backdrop-blur-sm rounded-lg px-2 py-1 border border-custom">
-            Row {rowIndex + 1}
-          </span>
+        <div className="flex-shrink-0 flex items-center justify-between p-2 bg-card/30 backdrop-blur-sm rounded-t-lg border border-custom mb-2">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => toggleRowCollapse(rowIndex)}
+              className="text-accent-blue hover:text-accent-blue/80 transition-colors"
+              title="Collapse row"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+              </svg>
+            </button>
+            <span className="text-xs text-white font-medium">
+              Row {rowIndex + 1}
+            </span>
+          </div>
+          <div className="text-xs text-muted">
+            {rowThreads.length} thread{rowThreads.length !== 1 ? 's' : ''}
+          </div>
         </div>
-        {rowThreads.map((thread) => (
-          <ThreadPanel key={thread.id} thread={thread} />
-        ))}
+        {/* Thread panels container */}
+        <div className="flex-1 flex gap-2 min-h-0 overflow-hidden">
+          {rowThreads.map((thread) => (
+            <ThreadPanel key={thread.id} thread={thread} />
+          ))}
+        </div>
       </div>
     );
   };
@@ -906,7 +920,7 @@ Question: ${threadChat.input}`;
       <div className={`${hasActiveThreads ? mainWidth : 'w-full'} flex flex-col transition-all duration-300 ${hasActiveThreads ? 'border-r-2 border-accent-blue/30 shadow-lg' : 'border-r border-transparent'}`}>
         {/* Header with model selector */}
         <div className="border-b border-custom bg-card/80 backdrop-blur-sm p-4">
-          <div className={`mx-auto ${expandedThread && expandedThread !== 'main' ? 'max-w-full px-2' : 'max-w-4xl'} transition-all duration-300`}>
+          <div className="mx-auto max-w-full px-4">
             <div className="flex items-center justify-between mb-4">
               <h1 className={`font-bold text-white ${expandedThread && expandedThread !== 'main' ? 'text-lg' : 'text-2xl'} transition-all duration-300`}>
                 {expandedThread && expandedThread !== 'main' ? 'Main Chat' : 'AI Chat with Contextual Threading'}
@@ -977,13 +991,7 @@ Question: ${threadChat.input}`;
               </div>
             </div>
           ) : (
-            <div className={`mx-auto space-y-4 transition-all duration-300 ${
-              expandedThread && expandedThread !== 'main' 
-                ? 'max-w-full p-2' 
-                : hasActiveThreads 
-                  ? 'max-w-full p-4' 
-                  : 'max-w-4xl p-4'
-            }`}>
+            <div className="mx-auto space-y-4 max-w-full p-4">
               {mainChat.messages.map((message) => (
                 <MessageContent key={message.id} message={message} />
               ))}
@@ -1004,13 +1012,7 @@ Question: ${threadChat.input}`;
         
         {/* Chat Input */}
         <div className="border-t border-custom bg-card/60 backdrop-blur-sm p-6">
-          <div className={`mx-auto transition-all duration-300 ${
-            expandedThread && expandedThread !== 'main' 
-              ? 'max-w-full px-2' 
-              : hasActiveThreads 
-                ? 'max-w-full' 
-                : 'max-w-4xl'
-          }`}>
+          <div className="mx-auto max-w-full">
             <ChatInput 
               onSubmit={mainChat.handleSubmit}
               input={mainChat.input}
@@ -1049,12 +1051,19 @@ Question: ${threadChat.input}`;
           </div>
 
           {/* Thread Rows Container */}
-          <div className="flex-1 overflow-y-auto p-2">
-            <div className="flex flex-col h-full">
+          <div className="flex-1 overflow-hidden p-2">
+            <div className="h-full flex flex-col gap-2">
               {threadRows.map((rowThreads, rowIndex) => {
                 const isCollapsed = collapsedRows.has(rowIndex);
+                const expandedRowsCount = threadRows.length - collapsedRows.size;
+                const heightClass = isCollapsed 
+                  ? "flex-shrink-0" 
+                  : expandedRowsCount > 0 
+                    ? `flex-1 min-h-0` 
+                    : "flex-1";
+                
                 return (
-                  <div key={rowIndex} className={isCollapsed ? "flex-shrink-0 mb-2" : "flex-1 min-h-0 mb-4 pt-8"}>
+                  <div key={rowIndex} className={heightClass}>
                     <ThreadRow threads={rowThreads} rowIndex={rowIndex} />
                   </div>
                 );
