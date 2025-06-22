@@ -266,7 +266,15 @@ export default function ThreadedChat() {
   // Function to gather thread content by rows for hierarchical synthesis
   const gatherThreadContentByRows = (messageId: string, isFromThread: boolean = false, threadId?: string) => {
     let originalMessage = '';
-    let threadRows: { rowId: number; threads: { threadTitle: string; context: string; actionType: string }[] }[] = [];
+    let threadRows: { 
+      rowId: number; 
+      threads: { 
+        threadTitle: string; 
+        context: string; 
+        actionType: string;
+        responses: string[]; // Collect all AI responses from this thread
+      }[] 
+    }[] = [];
 
     // Get the original message
     if (isFromThread && threadId) {
@@ -300,15 +308,23 @@ export default function ThreadedChat() {
       rowGroups.get(rowId)!.push(thread);
     });
 
-    // Convert to structured format
+    // Convert to structured format with actual thread content
     Array.from(rowGroups.entries()).forEach(([rowId, rowThreads]) => {
       threadRows.push({
         rowId,
-        threads: rowThreads.map(thread => ({
-          threadTitle: thread.title || 'Thread',
-          context: thread.selectedContext || '',
-          actionType: thread.actionType || 'ask'
-        }))
+        threads: rowThreads.map(thread => {
+          // Extract all AI responses from this thread
+          const aiResponses = thread.messages
+            .filter(msg => msg.role === 'assistant')
+            .map(msg => msg.content);
+
+          return {
+            threadTitle: thread.title || 'Thread',
+            context: thread.selectedContext || '',
+            actionType: thread.actionType || 'ask',
+            responses: aiResponses
+          };
+        })
       });
     });
 
@@ -318,33 +334,42 @@ export default function ThreadedChat() {
     return { originalMessage, threadRows, totalThreadCount: relatedThreads.length };
   };
 
-  // Function to create a row-level synthesis prompt
-  const createRowSynthesisPrompt = (originalMessage: string, rowThreads: { threadTitle: string; context: string; actionType: string }[], rowNumber: number) => {
-    let prompt = `Please create a focused synthesis for Row ${rowNumber + 1} of our deep dive exploration.
+  // Function to create a content aggregation prompt for a single row
+  const createRowSynthesisPrompt = (originalMessage: string, rowThreads: { threadTitle: string; context: string; actionType: string; responses: string[] }[], rowNumber: number) => {
+    let prompt = `Please create a comprehensive content aggregation from Row ${rowNumber + 1} of our deep dive exploration.
 
 **Original Topic:** "${originalMessage}"
 
-**Row ${rowNumber + 1} Exploration Focus:**
-This row contains ${rowThreads.length} related thread${rowThreads.length > 1 ? 's' : ''} that explored:
+**Content to Aggregate from Row ${rowNumber + 1}:**
+This row explored ${rowThreads.length} different aspect${rowThreads.length > 1 ? 's' : ''} and gathered the following information:
 
 `;
 
     rowThreads.forEach((thread, index) => {
-      const actionLabel = thread.actionType === 'ask' ? 'Questions about' :
-                         thread.actionType === 'details' ? 'Detailed analysis of' :
-                         thread.actionType === 'simplify' ? 'Simplified explanation of' :
-                         thread.actionType === 'examples' ? 'Examples related to' : 'Exploration of';
+      const actionLabel = thread.actionType === 'ask' ? 'Questions & Answers' :
+                         thread.actionType === 'details' ? 'Detailed Information' :
+                         thread.actionType === 'simplify' ? 'Simplified Explanations' :
+                         thread.actionType === 'examples' ? 'Examples & Cases' : 'Exploration Results';
       
-      prompt += `${index + 1}. **${actionLabel}:** "${thread.context}"\n`;
+      prompt += `\n**${index + 1}. ${actionLabel} - "${thread.context}"**\n`;
+      
+      if (thread.responses.length > 0) {
+        thread.responses.forEach((response, respIndex) => {
+          prompt += `Content ${respIndex + 1}:\n${response}\n\n`;
+        });
+      } else {
+        prompt += `(No responses collected yet)\n\n`;
+      }
     });
 
-    prompt += `\n**Please provide a concise synthesis that:**
-1. Summarizes the key insights from this specific exploration angle
-2. Identifies the main patterns or themes that emerged
-3. Highlights the most important takeaways from this row's investigation
-4. Keeps the focus tight and specific to this row's exploration
+    prompt += `\n**Please provide a comprehensive aggregation that:**
 
-This synthesis will be combined with other rows to create a comprehensive overview, so focus on what makes this row's exploration unique and valuable.`;
+1. **Consolidated Information:** Combine all the information above into a well-organized, comprehensive overview
+2. **Key Insights:** Extract and highlight the most important insights and findings
+3. **Organized Structure:** Present the information in a logical, easy-to-follow structure
+4. **Complete Coverage:** Ensure all valuable information from the threads above is incorporated
+
+Present this as a complete, organized deep dive that aggregates all the information gathered, not a meta-analysis of the exploration process.`;
 
     return prompt;
   };
@@ -364,50 +389,61 @@ This synthesis will be combined with other rows to create a comprehensive overvi
     if (threadRows.length === 1) {
       synthesisPrompt = createRowSynthesisPrompt(originalMessage, threadRows[0].threads, 0);
     } else {
-      // For multiple rows, create a comprehensive hierarchical synthesis
-      synthesisPrompt = `Based on the original topic and our systematic deep dive exploration across ${threadRows.length} different investigation rows (${totalThreadCount} total threads), please provide a comprehensive hierarchical synthesis.
+      // For multiple rows, create a comprehensive content aggregation
+      synthesisPrompt = `Please create a comprehensive aggregation and synthesis of all information gathered from our deep dive exploration.
 
 **Original Topic:**
 "${originalMessage}"
 
-**Multi-Row Deep Dive Structure:**
-Our exploration was organized into ${threadRows.length} distinct investigation rows:
+**Complete Information Collected:**
+Our exploration gathered information across ${threadRows.length} different investigation areas (${totalThreadCount} total threads). Here is all the content collected:
 
 `;
 
       threadRows.forEach((row, rowIndex) => {
-        synthesisPrompt += `\n**Row ${rowIndex + 1} (${row.threads.length} thread${row.threads.length > 1 ? 's' : ''}):**\n`;
+        synthesisPrompt += `\n**Investigation Area ${rowIndex + 1} (${row.threads.length} thread${row.threads.length > 1 ? 's' : ''}):**\n`;
         
         row.threads.forEach((thread, threadIndex) => {
-          const actionLabel = thread.actionType === 'ask' ? 'Questions about' :
-                             thread.actionType === 'details' ? 'Detailed analysis of' :
-                             thread.actionType === 'simplify' ? 'Simplified explanation of' :
-                             thread.actionType === 'examples' ? 'Examples related to' : 'Exploration of';
+          const actionLabel = thread.actionType === 'ask' ? 'Questions & Answers' :
+                             thread.actionType === 'details' ? 'Detailed Information' :
+                             thread.actionType === 'simplify' ? 'Simplified Explanations' :
+                             thread.actionType === 'examples' ? 'Examples & Cases' : 'Exploration Results';
           
-          synthesisPrompt += `  ${threadIndex + 1}. ${actionLabel}: "${thread.context}"\n`;
+          synthesisPrompt += `\n**${threadIndex + 1}. ${actionLabel} - "${thread.context}"**\n`;
+          
+          if (thread.responses.length > 0) {
+            thread.responses.forEach((response, respIndex) => {
+              synthesisPrompt += `Content ${respIndex + 1}:\n${response}\n\n`;
+            });
+          } else {
+            synthesisPrompt += `(No responses collected yet)\n\n`;
+          }
         });
       });
 
-      synthesisPrompt += `\n**Please provide a comprehensive hierarchical synthesis that:**
+      synthesisPrompt += `\n**Please provide a comprehensive deep dive that includes:**
 
-**LEVEL 1 - Row-by-Row Analysis:**
-For each of the ${threadRows.length} investigation rows above:
-- Synthesize the key insights from that row's specific exploration focus
-- Identify what unique perspective that row brought to understanding the topic
-- Highlight the most valuable discoveries from that investigation angle
+**1. COMPLETE INFORMATION AGGREGATION**
+- Consolidate ALL the information above into a well-organized, comprehensive overview
+- Ensure no valuable insights or details are missed
+- Present the information in a logical, structured format
 
-**LEVEL 2 - Cross-Row Integration:**
-- **Connect the Dots:** How do insights from different rows complement and build upon each other?
-- **Identify Patterns:** What themes or concepts emerged across multiple rows?
-- **Resolve Tensions:** Where different rows provided different perspectives, how do they reconcile?
+**2. KEY INSIGHTS & FINDINGS**
+- Extract and highlight the most important insights from all the collected information
+- Identify significant patterns, themes, or connections that emerge
+- Present the core findings clearly and prominently
 
-**LEVEL 3 - Unified Understanding:**
-- **Comprehensive Summary:** A complete picture that integrates all ${totalThreadCount} threads of investigation
-- **Key Takeaways:** The most important insights that emerged from this systematic exploration
-- **Actionable Insights:** Practical implications and applications
-- **Knowledge Synthesis:** How this multi-faceted investigation created a deeper understanding than any single approach could have achieved
+**3. ORGANIZED DEEP DIVE PRESENTATION**
+- Structure the aggregated information as a complete, organized deep dive
+- Use clear headings, sections, and formatting for easy navigation
+- Make it comprehensive yet accessible
 
-Present this as a well-structured, comprehensive analysis that clearly shows how our systematic, multi-row exploration methodology led to a richer and more complete understanding of the topic.`;
+**4. EXECUTIVE SUMMARY**
+- Conclude with a high-level summary that captures the essence of everything learned
+- Provide key takeaways and actionable insights
+- Give a concise overview of the complete understanding gained
+
+Present this as a complete, organized compilation of all the information gathered - essentially creating the definitive deep dive resource on this topic based on all our exploration.`;
     }
 
     // Add the synthesis prompt to the main chat instead of creating a new thread
@@ -856,22 +892,22 @@ Present this as a well-structured, comprehensive analysis that clearly shows how
     return (
       <div className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}>
         <div className="flex flex-col items-end gap-2">
-          <div
-            className={`max-w-4xl px-4 py-3 rounded-lg border ${
-              isUser
-                ? 'bg-accent-blue/20 text-white border-accent-blue/30 backdrop-blur-sm'
-                : 'bg-card/80 text-white cursor-text select-text border-custom backdrop-blur-sm'
-            }`}
-            onMouseUp={handleMouseUp}
-          >
-            <div className="whitespace-pre-wrap text-sm leading-relaxed">
-              {message.content}
+        <div
+          className={`max-w-4xl px-4 py-3 rounded-lg border ${
+            isUser
+              ? 'bg-accent-blue/20 text-white border-accent-blue/30 backdrop-blur-sm'
+              : 'bg-card/80 text-white cursor-text select-text border-custom backdrop-blur-sm'
+          }`}
+          onMouseUp={handleMouseUp}
+        >
+          <div className="whitespace-pre-wrap text-sm leading-relaxed">
+            {message.content}
+          </div>
+          {!isUser && (
+            <div className="mt-2 text-xs text-muted opacity-60">
+              Select text to create a new thread
             </div>
-            {!isUser && (
-              <div className="mt-2 text-xs text-muted opacity-60">
-                Select text to create a new thread
-              </div>
-            )}
+          )}
           </div>
           
           {/* Synthesis Button - only show for AI messages that have related threads */}
@@ -1365,30 +1401,30 @@ Question: ${threadChat.input}`;
           {/* Header with model selector */}
           <div className="border-b border-custom bg-card/80 backdrop-blur-sm p-4">
             <div className="mx-auto max-w-full px-4">
-              {hasActiveThreads && (
+                {hasActiveThreads && (
                 <div className="flex items-center justify-end gap-2 mb-4">
-                  <button
-                    onClick={() => toggleThreadExpansion('main')}
-                    className={`p-2 rounded-lg hover:bg-hover transition-colors ${
-                      expandedThread === 'main' ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
-                    }`}
-                    title={expandedThread === 'main' ? 'Collapse main chat' : 'Expand main chat'}
-                  >
-                    <span className="text-xl font-bold">
-                      {expandedThread === 'main' ? '←' : '→'}
-                    </span>
-                  </button>
-                  {manualMainWidth !== null && (
-                    <button
-                      onClick={() => setManualMainWidth(null)}
-                      className="p-1 text-xs bg-accent-orange/20 text-accent-orange hover:bg-accent-orange/30 rounded-lg transition-colors"
-                      title="Reset to automatic sizing"
-                    >
-                      🔄 Reset
-                    </button>
-                  )}
-                </div>
-              )}
+                                <button
+              onClick={() => toggleThreadExpansion('main')}
+              className={`p-2 rounded-lg hover:bg-hover transition-colors ${
+                expandedThread === 'main' ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
+              }`}
+              title={expandedThread === 'main' ? 'Collapse main chat' : 'Expand main chat'}
+            >
+              <span className="text-xl font-bold">
+                {expandedThread === 'main' ? '←' : '→'}
+              </span>
+            </button>
+                    {manualMainWidth !== null && (
+                      <button
+                        onClick={() => setManualMainWidth(null)}
+                        className="p-1 text-xs bg-accent-orange/20 text-accent-orange hover:bg-accent-orange/30 rounded-lg transition-colors"
+                        title="Reset to automatic sizing"
+                      >
+                        🔄 Reset
+                      </button>
+                    )}
+                  </div>
+                )}
               
               {/* DeepDive Header */}
               <div className="text-center mb-4 -mt-2 relative">
@@ -1414,8 +1450,8 @@ Question: ${threadChat.input}`;
               {hasActiveThreads && (
                 <div className="mt-2 text-sm text-muted">
                   💡 Select text in any AI response to create contextual threads - drill deeper into topics!
-                </div>
-              )}
+                    </div>
+                  )}
             </div>
           </div>
 
