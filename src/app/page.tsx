@@ -254,33 +254,14 @@ export default function Home() {
           <div className="flex items-center gap-3">
             {user ? (
               <>
-                {/* User info */}
-                <div className="flex items-center gap-3">
-                  <Image
-                    src={user.photoURL || '/next.svg'}
-                    alt={user.displayName || 'User'}
-                    width={32}
-                    height={32}
-                    className="w-8 h-8 rounded-full"
-                  />
-                  <span className="text-white text-sm">{user.displayName}</span>
-                  
-                  {/* Debug button */}
-                  <button
-                    onClick={() => setShowDebugPanel(!showDebugPanel)}
-                    className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded-lg font-medium transition-all duration-200 shadow-lg text-xs"
-                    title="Debug Firebase connection"
-                  >
-                    🔧 Debug
-                  </button>
-                  
-                  {/* Save/Load buttons */}
+                {/* Action buttons */}
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => setShowSaveDialog(true)}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 shadow-lg flex items-center gap-2"
+                    className="bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 border border-slate-600 hover:border-slate-500 flex items-center gap-2"
                     title="Save current deep dive"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12" />
                     </svg>
                     {currentDeepDiveId ? 'Update' : 'Save'}
@@ -288,28 +269,63 @@ export default function Home() {
                   
                   <button
                     onClick={() => setShowLoadDialog(true)}
-                    className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 shadow-lg flex items-center gap-2"
+                    className="bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 border border-slate-600 hover:border-slate-500 flex items-center gap-2"
                     title="Load saved deep dive"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
                     </svg>
                     Load ({savedDeepDives.length})
                   </button>
                   
                   <button
-                    onClick={signOut}
-                    className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 shadow-lg"
-                    title="Sign out"
+                    onClick={handleClearAll}
+                    className="bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 border border-slate-600 hover:border-slate-500 flex items-center gap-2"
+                    title="Clear all conversations and start fresh"
                   >
-                    Sign Out
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Clear All
                   </button>
+                  
+                  <button
+                    onClick={handleCopyAllResponses}
+                    className="bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 border border-slate-600 hover:border-slate-500 flex items-center gap-2"
+                    title="Copy all AI responses to clipboard"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                    </svg>
+                    Copy All Responses
+                  </button>
+                </div>
+                
+                {/* Sign out button */}
+                <button
+                  onClick={signOut}
+                  className="bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 border border-slate-600 hover:border-slate-500 ml-4"
+                  title="Sign out"
+                >
+                  Sign Out
+                </button>
+                
+                {/* Profile info */}
+                <div className="flex items-center gap-3 ml-4 pl-4 border-l border-slate-600">
+                  <Image
+                    src={user.photoURL || '/next.svg'}
+                    alt={user.displayName || 'User'}
+                    width={32}
+                    height={32}
+                    className="w-8 h-8 rounded-full border border-slate-600"
+                  />
+                  <span className="text-slate-300 text-sm">{user.displayName}</span>
                 </div>
               </>
             ) : (
               <button
                 onClick={signInWithGoogle}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 shadow-lg flex items-center gap-2"
+                className="bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white px-4 py-2 rounded-md font-medium transition-all duration-200 border border-slate-600 hover:border-slate-500 flex items-center gap-2"
                 title="Sign in with Google to save your deep dives"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -321,28 +337,6 @@ export default function Home() {
                 Sign in with Google
               </button>
             )}
-            
-            <button
-              onClick={handleClearAll}
-              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 shadow-lg flex items-center gap-2"
-              title="Clear all conversations and start fresh"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-              Clear All
-            </button>
-            
-            <button
-              onClick={handleCopyAllResponses}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 shadow-lg flex items-center gap-2"
-              title="Copy all AI responses to clipboard"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-              </svg>
-              Copy All Responses
-            </button>
           </div>
         </header>
         
