@@ -202,9 +202,34 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
 
   // Function to get current state for saving
   const getCurrentState = () => {
+    // Collect messages from all thread chat instances
+    const threadsWithMessages = threads.map(thread => {
+      const threadChatInstance = threadChatRefs.current[thread.id];
+      let currentMessages = thread.messages || [];
+      
+      // If we have a live chat instance, get its current messages
+      if (threadChatInstance && threadChatInstance.messages) {
+        currentMessages = threadChatInstance.messages.map((msg: any) => ({
+          id: msg.id,
+          content: msg.content,
+          role: msg.role,
+          timestamp: msg.timestamp || Date.now(),
+        }));
+      }
+      
+      return {
+        ...thread,
+        messages: currentMessages,
+      };
+    });
+
+    console.log('📊 getCurrentState - Thread message counts:', 
+      threadsWithMessages.map(t => ({ id: t.id, messageCount: t.messages.length }))
+    );
+
     return {
       mainMessages: mainChat.messages,
-      threads: threads,
+      threads: threadsWithMessages,
       selectedModel: selectedModel,
       activeThreadId: activeThreadId,
     };
@@ -307,6 +332,9 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     
     // Clear thread messages to load
     setThreadMessagesToLoad({});
+    
+    // Clear thread chat references
+    threadChatRefs.current = {};
     
     // Reset UI state
     setExpandedThread('main');
@@ -813,6 +841,16 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     
     // Create a dedicated, isolated chat instance for this specific thread with initial messages
     const threadChat = useThreadChat(selectedModel, thread.id, initialMessages);
+    
+    // Store the thread chat instance reference for accessing messages during save
+    React.useEffect(() => {
+      threadChatRefs.current[thread.id] = threadChat;
+      
+      // Cleanup when thread is unmounted
+      return () => {
+        delete threadChatRefs.current[thread.id];
+      };
+    }, [thread.id, threadChat]);
     
     // Clear the messages from loading queue when thread is rendered with initial messages
     React.useEffect(() => {
