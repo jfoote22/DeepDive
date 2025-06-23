@@ -663,22 +663,25 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     mainChat.setInput('');
   };
 
-  const ChatInput = ({ isThread = false, onSubmit, input, handleInputChange, isLoading }: any) => {
+  const ChatInput = ({ isThread = false, onSubmit, input, handleInputChange, isLoading, threadChat }: any) => {
     const [localInput, setLocalInput] = useState('');
 
     const handleSubmit = (e: any) => {
       e.preventDefault();
       if (!localInput.trim()) return;
       
-      // If this is the main chat, use mainChat.append directly
       if (!isThread && mainChat) {
+        // Main chat submission
         mainChat.append({
           role: 'user',
           content: localInput.trim()
         });
-      } else {
-        // For threads, use the passed onSubmit
-        onSubmit({ preventDefault: () => {}, target: { value: localInput } });
+      } else if (isThread && threadChat) {
+        // Thread chat submission - use the thread's chat instance
+        threadChat.append({
+          role: 'user',
+          content: localInput.trim()
+        });
       }
       setLocalInput('');
     };
@@ -1047,55 +1050,23 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
             </div>
           )}
           {threadChat.messages.map((message) => (
-            <MessageContent key={message.id} message={message} isThread={true} threadId={thread.id} />
+            <MessageContent 
+              key={message.id} 
+              message={message} 
+              isThread={true}
+              threadId={thread.id}
+            />
           ))}
-          {threadChat.isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-card/80 backdrop-blur-sm p-3 rounded-lg border border-custom">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-accent-blue rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-accent-blue rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-accent-blue rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                </div>
-              </div>
-            </div>
-          )}
-          {threadChat.messages.length > 0 && (
-            <div className="text-xs text-muted text-center py-2 border-t border-custom mt-4">
-              💡 Select any AI response text to create deeper threads
-            </div>
-          )}
         </div>
 
         {/* Thread Input */}
-        <div className="flex-shrink-0 border-t border-custom p-3 bg-card/40 backdrop-blur-sm">
-          <ChatInput 
+        <div className="flex-shrink-0 p-3 bg-gradient-to-t from-slate-900/40 to-transparent border-t border-custom">
+          <ChatInput
             isThread={true}
-            onSubmit={(e: any) => {
-              e.preventDefault();
-              if (!threadChat.input.trim()) return;
-              
-              // Include context with the user's message for better AI understanding
-              let messageWithContext = threadChat.input;
-              if (thread.selectedContext && threadChat.messages.length <= 1) {
-                // Only add context for the first few messages to establish context
-                messageWithContext = `Context: "${thread.selectedContext}"
-
-Question: ${threadChat.input}`;
-              }
-              
-              // Send the message with context
-              threadChat.append({
-                role: 'user',
-                content: messageWithContext
-              });
-              
-              // Clear the input
-              threadChat.setInput('');
-            }}
             input={threadChat.input}
             handleInputChange={threadChat.handleInputChange}
             isLoading={threadChat.isLoading}
+            threadChat={threadChat}
           />
         </div>
       </div>
