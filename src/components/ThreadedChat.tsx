@@ -19,7 +19,7 @@ export interface Thread {
   title?: string;
   rowId?: number; // Track which row this thread belongs to
   sourceType?: 'main' | 'thread'; // Track if created from main chat or another thread
-  actionType?: 'ask' | 'details' | 'simplify' | 'examples'; // Track which context action was used
+  actionType?: 'ask' | 'details' | 'simplify' | 'examples' | 'links' | 'videos'; // Track which context action was used
 }
 
 type ModelProvider = 'openai' | 'claude' | 'anthropic';
@@ -79,12 +79,17 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   const [collapsedRows, setCollapsedRows] = useState<Set<number>>(new Set());
   // Context collapse state - start with all contexts collapsed by default
   const [collapsedContexts, setCollapsedContexts] = useState<Set<string>>(new Set());
+  // Fullscreen state for threads
+  const [fullscreenThread, setFullscreenThread] = useState<string | null>(null);
   
   // Store chat instances for each thread - each thread gets its own isolated chat
   const [threadChatInstances, setThreadChatInstances] = useState<{[key: string]: any}>({});
   
   // Track messages that need to be loaded into thread chat instances
   const [threadMessagesToLoad, setThreadMessagesToLoad] = useState<{[key: string]: Message[]}>({});
+
+  // Store references to thread chat instances for copying
+  const threadChatRefs = useRef<{[key: string]: any}>({});
 
   const getApiEndpoint = (model: ModelProvider) => {
     switch (model) {
@@ -106,9 +111,6 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
       console.error('Main chat error:', error);
     },
   });
-
-  // Store references to thread chat instances for copying
-  const threadChatRefs = useRef<{[key: string]: any}>({});
 
   // Function to expand all collapsed rows
   const expandAllRows = () => {
@@ -386,7 +388,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     console.log('Context menu should be showing'); // Debug log
   }, []);
 
-  const createNewThread = (context: string, autoExpand: boolean = false, autoSend: boolean = false, actionType: 'ask' | 'details' | 'simplify' | 'examples' = 'ask') => {
+  const createNewThread = (context: string, autoExpand: boolean = false, autoSend: boolean = false, actionType: 'ask' | 'details' | 'simplify' | 'examples' | 'links' | 'videos' = 'ask') => {
     // Create a unique thread ID with timestamp and random component for complete uniqueness
     const newThreadId = `thread-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
@@ -519,26 +521,45 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
       setActiveThreadId(null);
     }
     
+    // If this was the fullscreen thread, reset fullscreen
+    if (fullscreenThread === threadId) {
+      setFullscreenThread(null);
+    }
 
   };
 
   const ContextMenu = () => {
     if (!showContextMenu) return null;
 
+    // Context menu buttons in the requested order: Get more details (Green), Get links (Blue), Get videos (Yellow), Give examples (Purple), Simplify this (Orange), Ask about this (Cyan)
     const menuItems = [
-      {
-        action: 'ask',
-        icon: '💬',
-        label: 'Ask about this',
-        onClick: () => createNewThread(selectedText, false, false, 'ask'),
-        colorScheme: getActionColorScheme('ask')
-      },
       {
         action: 'details',
         icon: '🔍',
         label: 'Get more details',
         onClick: () => createNewThread(selectedText, true, false, 'details'),
         colorScheme: getActionColorScheme('details')
+      },
+      {
+        action: 'links',
+        icon: '🔗',
+        label: 'Get links',
+        onClick: () => createNewThread(`Please provide relevant links and resources related to: "${selectedText}". Include authoritative sources, documentation, articles, and useful websites that would help someone learn more about this topic.`, false, true, 'links'),
+        colorScheme: getActionColorScheme('links')
+      },
+      {
+        action: 'videos',
+        icon: '🎥',
+        label: 'Get videos',
+        onClick: () => createNewThread(`Please suggest relevant YouTube videos, tutorials, and video content related to: "${selectedText}". Include educational videos, tutorials, documentaries, and other video resources that would help understand this topic better.`, false, true, 'videos'),
+        colorScheme: getActionColorScheme('videos')
+      },
+      {
+        action: 'examples',
+        icon: '📝',
+        label: 'Give examples',
+        onClick: () => createNewThread(`Please provide 3-5 concrete, practical examples that illustrate or relate to: "${selectedText}". Make the examples diverse and easy to understand.`, false, true, 'examples'),
+        colorScheme: getActionColorScheme('examples')
       },
       {
         action: 'simplify',
@@ -548,11 +569,11 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         colorScheme: getActionColorScheme('simplify')
       },
       {
-        action: 'examples',
-        icon: '📝',
-        label: 'Give examples',
-        onClick: () => createNewThread(`Please provide 3-5 concrete, practical examples that illustrate or relate to: "${selectedText}". Make the examples diverse and easy to understand.`, false, true, 'examples'),
-        colorScheme: getActionColorScheme('examples')
+        action: 'ask',
+        icon: '💬',
+        label: 'Ask about this',
+        onClick: () => createNewThread(selectedText, false, false, 'ask'),
+        colorScheme: getActionColorScheme('ask')
       }
     ];
 
@@ -699,6 +720,10 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         return 'Simplify this';
       case 'examples':
         return 'Give examples';
+      case 'links':
+        return 'Get links';
+      case 'videos':
+        return 'Get videos';
       default:
         return 'Thread';
     }
@@ -723,8 +748,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     switch (actionType) {
       case 'ask':
         return {
-          bg: 'bg-accent-blue',
-          border: 'border-accent-blue',
+          bg: 'bg-cyan-500',
+          border: 'border-cyan-500',
           text: 'text-white',
           badgeBg: 'bg-white/20',
           badgeText: 'text-white',
@@ -757,14 +782,32 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           badgeText: 'text-white',
           badgeBorder: 'border-white/30'
         };
+      case 'links':
+        return {
+          bg: 'bg-accent-blue',
+          border: 'border-accent-blue',
+          text: 'text-white',
+          badgeBg: 'bg-white/20',
+          badgeText: 'text-white',
+          badgeBorder: 'border-white/30'
+        };
+      case 'videos':
+        return {
+          bg: 'bg-accent-yellow',
+          border: 'border-accent-yellow',
+          text: 'text-white',
+          badgeBg: 'bg-white/20',
+          badgeText: 'text-white',
+          badgeBorder: 'border-white/30'
+        };
       default:
         return {
-          bg: 'bg-card/80',
+          bg: 'bg-muted',
           border: 'border-custom',
           text: 'text-white',
-          badgeBg: 'bg-slate-700/30',
-          badgeText: 'text-slate-300',
-          badgeBorder: 'border-slate-600'
+          badgeBg: 'bg-white/20',
+          badgeText: 'text-white',
+          badgeBorder: 'border-white/30'
         };
     }
   };
@@ -902,18 +945,21 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     
 
 
-    // Calculate thread width based on expansion state
+    // Calculate thread width based on expansion state and fullscreen mode
     const isExpanded = expandedThread === thread.id;
     const isCollapsed = expandedThread && expandedThread !== thread.id && expandedThread !== 'main';
     const isMainExpanded = expandedThread === 'main';
+    const isFullscreen = fullscreenThread === thread.id;
     
-    const threadPanelWidth = isExpanded 
-      ? 'flex-1' // Takes most of the thread area
-      : isCollapsed 
-        ? 'w-80' // Standard size when another thread is expanded
-        : isMainExpanded
-          ? 'w-80' // Standard size when main is expanded
-          : 'flex-1'; // Equal share in balanced view
+    const threadPanelWidth = isFullscreen
+      ? 'w-full' // Fullscreen thread takes entire thread area
+      : isExpanded 
+        ? 'flex-1' // Takes most of the thread area
+        : isCollapsed 
+          ? 'w-80' // Standard size when another thread is expanded
+          : isMainExpanded
+            ? 'w-80' // Standard size when main is expanded
+            : 'flex-1'; // Equal share in balanced view
     
     // Get color scheme based on action type
     const colorScheme = getActionColorScheme(thread.actionType);
@@ -937,6 +983,17 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
               <span className="font-semibold text-white text-sm">{getContextSource(thread)}</span>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => toggleThreadFullscreen(thread.id)}
+                className={`p-1 rounded-lg hover:bg-hover transition-colors ${
+                  fullscreenThread === thread.id ? 'bg-accent-green/20 text-accent-green' : 'text-gray-400 hover:text-white'
+                }`}
+                title={fullscreenThread === thread.id ? 'Exit fullscreen' : 'Fullscreen thread'}
+              >
+                <span className="text-xl font-bold">
+                  {fullscreenThread === thread.id ? '⊡' : '⊞'}
+                </span>
+              </button>
               <button
                 onClick={() => toggleThreadExpansion(thread.id)}
                 className={`p-1 rounded-lg hover:bg-hover transition-colors ${
@@ -970,7 +1027,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                     stroke="currentColor" 
                     viewBox="0 0 24 24"
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7m7 7V3" />
                   </svg>
                 </button>
               </div>
@@ -1086,6 +1143,11 @@ Question: ${threadChat.input}`;
       }
       return newCollapsed;
     });
+  };
+
+  // Toggle thread fullscreen mode
+  const toggleThreadFullscreen = (threadId: string) => {
+    setFullscreenThread(prev => prev === threadId ? null : threadId);
   };
 
   // Handle manual resize
@@ -1260,9 +1322,15 @@ Question: ${threadChat.input}`;
         </div>
         {/* Thread panels container */}
         <div className="flex-1 flex gap-2 min-h-0 overflow-hidden">
-          {rowThreads.map((thread) => (
-            <ThreadPanel key={thread.id} thread={thread} />
-          ))}
+          {rowThreads
+            .filter(thread => {
+              // If any thread in this row is fullscreen, only show that thread
+              const hasFullscreenInRow = rowThreads.some(t => fullscreenThread === t.id);
+              return hasFullscreenInRow ? fullscreenThread === thread.id : true;
+            })
+            .map((thread) => (
+              <ThreadPanel key={thread.id} thread={thread} />
+            ))}
         </div>
       </div>
     );
@@ -1430,21 +1498,35 @@ Question: ${threadChat.input}`;
             {/* Thread Rows Container */}
             <div className="flex-1 overflow-hidden p-2">
               <div className="h-full flex flex-col gap-2">
-                {threadRows.map((rowThreads, rowIndex) => {
-                  const isCollapsed = collapsedRows.has(rowIndex);
-                  const expandedRowsCount = threadRows.length - collapsedRows.size;
-                  const heightClass = isCollapsed 
-                    ? "flex-shrink-0" 
-                    : expandedRowsCount > 0 
-                      ? `flex-1 min-h-0` 
-                      : "flex-1";
-                  
-                  return (
-                    <div key={rowIndex} className={heightClass}>
-                      <ThreadRow threads={rowThreads} rowIndex={rowIndex} />
-                    </div>
-                  );
-                })}
+                {threadRows
+                  .filter((rowThreads, rowIndex) => {
+                    // If any thread is fullscreen, only show the row containing that thread
+                    if (fullscreenThread) {
+                      return rowThreads.some(thread => thread.id === fullscreenThread);
+                    }
+                    return true;
+                  })
+                  .map((rowThreads, rowIndex) => {
+                    const isCollapsed = collapsedRows.has(rowIndex);
+                    const visibleRows = threadRows.filter((_, idx) => {
+                      if (fullscreenThread) {
+                        return threadRows[idx].some(thread => thread.id === fullscreenThread);
+                      }
+                      return true;
+                    });
+                    const expandedRowsCount = visibleRows.length - collapsedRows.size;
+                    const heightClass = isCollapsed 
+                      ? "flex-shrink-0" 
+                      : expandedRowsCount > 0 
+                        ? `flex-1 min-h-0` 
+                        : "flex-1";
+                    
+                    return (
+                      <div key={rowIndex} className={heightClass}>
+                        <ThreadRow threads={rowThreads} rowIndex={rowIndex} />
+                      </div>
+                    );
+                  })}
               </div>
             </div>
           </div>
@@ -1525,6 +1607,20 @@ Question: ${threadChat.input}`;
                 label: 'Give examples',
                 onClick: () => createNewThread(`Please provide 3-5 concrete, practical examples that illustrate or relate to: &quot;${selectedText}&quot;. Make the examples diverse and easy to understand.`, false, true, 'examples'),
                 colorScheme: getActionColorScheme('examples')
+              },
+              {
+                action: 'links',
+                icon: '🔗',
+                label: 'Get links',
+                onClick: () => createNewThread(`Please provide relevant links and resources related to: "${selectedText}". Include authoritative sources, documentation, articles, and useful websites that would help someone learn more about this topic.`, false, true, 'links'),
+                colorScheme: getActionColorScheme('links')
+              },
+              {
+                action: 'videos',
+                icon: '🎥',
+                label: 'Get videos',
+                onClick: () => createNewThread(`Please suggest relevant YouTube videos, tutorials, and video content related to: "${selectedText}". Include educational videos, tutorials, documentaries, and other video resources that would help understand this topic better.`, false, true, 'videos'),
+                colorScheme: getActionColorScheme('videos')
               }
             ].map((item) => (
               <button
