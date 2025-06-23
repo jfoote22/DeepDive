@@ -5,6 +5,7 @@ import ThreadedChat from "../components/ThreadedChat";
 import FirebaseTest from "../components/FirebaseTest";
 import { AuthContext } from '../lib/contexts/AuthContext';
 import { saveDeepDive, getUserDeepDives, updateDeepDive, deleteDeepDive, DeepDiveData } from '../lib/firebase/firebaseUtils';
+import Image from 'next/image';
 
 export default function Home() {
   const threadedChatRef = useRef<any>(null);
@@ -255,9 +256,11 @@ export default function Home() {
               <>
                 {/* User info */}
                 <div className="flex items-center gap-3">
-                  <img
-                    src={user.photoURL || ''}
+                  <Image
+                    src={user.photoURL || '/next.svg'}
                     alt={user.displayName || 'User'}
+                    width={32}
+                    height={32}
                     className="w-8 h-8 rounded-full"
                   />
                   <span className="text-white text-sm">{user.displayName}</span>

@@ -413,6 +413,12 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         sourceType,
         totalThreads: prev.length + 1 
       });
+      
+      // If this is the first thread being created, collapse the main chat and expand this thread
+      if (prev.length === 0) {
+        setExpandedThread(newThreadId);
+      }
+      
       return [...prev, newThread];
     });
     
@@ -776,6 +782,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
       </div>
     );
   });
+  MessageContent.displayName = 'MessageContent';
 
   const ThreadPanel = ({ thread }: { thread: Thread }) => {
     // Create a dedicated, isolated chat instance for this specific thread
@@ -1431,14 +1438,14 @@ Question: ${threadChat.input}`;
                 action: 'simplify',
                 icon: '🎯',
                 label: 'Simplify this',
-                onClick: () => createNewThread(`Please explain this in the simplest terms possible, as if you're teaching it to someone who is completely new to the topic: "${selectedText}"`, false, true, 'simplify'),
+                onClick: () => createNewThread(`Please explain this in the simplest terms possible, as if you're teaching it to someone who is completely new to the topic: &quot;${selectedText}&quot;`, false, true, 'simplify'),
                 colorScheme: getActionColorScheme('simplify')
               },
               {
                 action: 'examples',
                 icon: '📝',
                 label: 'Give examples',
-                onClick: () => createNewThread(`Please provide 3-5 concrete, practical examples that illustrate or relate to: "${selectedText}". Make the examples diverse and easy to understand.`, false, true, 'examples'),
+                onClick: () => createNewThread(`Please provide 3-5 concrete, practical examples that illustrate or relate to: &quot;${selectedText}&quot;. Make the examples diverse and easy to understand.`, false, true, 'examples'),
                 colorScheme: getActionColorScheme('examples')
               }
             ].map((item) => (
