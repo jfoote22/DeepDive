@@ -12,10 +12,31 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
+// Check if Firebase is properly configured
+const isFirebaseConfigured = () => {
+  return !!(
+    firebaseConfig.apiKey &&
+    firebaseConfig.authDomain &&
+    firebaseConfig.projectId &&
+    firebaseConfig.storageBucket &&
+    firebaseConfig.messagingSenderId &&
+    firebaseConfig.appId
+  );
+};
+
+// Initialize Firebase only if properly configured
+let app: any = null;
+let auth: any = null;
+let db: any = null;
+let storage: any = null;
+
+if (isFirebaseConfigured()) {
+  app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+  storage = getStorage(app);
+} else {
+  console.warn("Firebase configuration is incomplete. Firebase features will be disabled.");
+}
 
 export { app, auth, db, storage };
