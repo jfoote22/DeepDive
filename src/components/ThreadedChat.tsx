@@ -208,7 +208,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     }
   }, [touchState]);
 
-  const startMobileSelection = (touch: Touch, messageElement: HTMLElement, messageId: string, isFromThread: boolean, threadId?: string) => {
+  const startMobileSelection = React.useCallback((touch: Touch, messageElement: HTMLElement, messageId: string, isFromThread: boolean, threadId?: string) => {
     const textContent = messageElement.textContent || '';
     const rect = messageElement.getBoundingClientRect();
     const relativeX = touch.clientX - rect.left;
@@ -230,7 +230,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     
     setTouchState(prev => ({ ...prev, isDragging: true }));
     highlightMobileSelection(messageElement, charOffset, charOffset + 10);
-  };
+  }, []);
 
   const handleTouchMove = React.useCallback((e: TouchEvent) => {
     if (!mobileSelection.isActive || !touchState.isDragging || !mobileSelection.messageElement) return;
@@ -1842,7 +1842,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
             <div className="text-center mb-3">
               <div className="text-sm text-white font-semibold mb-1">Selected Text</div>
               <div className="text-xs text-gray-300 max-w-sm overflow-hidden">
-                "{mobileSelection.text.length > 100 ? mobileSelection.text.substring(0, 100) + '...' : mobileSelection.text}"
+                &quot;{mobileSelection.text.length > 100 ? mobileSelection.text.substring(0, 100) + '...' : mobileSelection.text}&quot;
               </div>
             </div>
             <div className="flex gap-3 justify-center">
