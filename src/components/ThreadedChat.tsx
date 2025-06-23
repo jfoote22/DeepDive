@@ -189,6 +189,88 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     }
   };
 
+  // Function to get current state for saving
+  const getCurrentState = () => {
+    return {
+      mainMessages: mainChat.messages,
+      threads: threads,
+      selectedModel: selectedModel,
+      activeThreadId: activeThreadId,
+    };
+  };
+
+  // Function to load state from saved deep dive
+  const loadState = (state: any) => {
+    console.log('🔄 Loading deep dive state...', {
+      title: state.title || 'Unknown',
+      mainMessagesCount: state.mainMessages?.length || 0,
+      threadsCount: state.threads?.length || 0,
+      selectedModel: state.selectedModel
+    });
+
+    try {
+      // Clear current state first
+      clearAllAndStartFresh();
+      
+      // Wait a bit for the clear to take effect
+      setTimeout(() => {
+        // Set model first
+        setSelectedModel(state.selectedModel || 'anthropic');
+        
+        // Set threads - ensure they have all required properties
+        const loadedThreads = (state.threads || []).map((thread: any) => ({
+          id: thread.id || `thread-${Date.now()}-${Math.random()}`,
+          messages: thread.messages || [],
+          selectedContext: thread.selectedContext || '',
+          title: thread.title || 'Untitled Thread',
+          rowId: thread.rowId || 0,
+          sourceType: thread.sourceType || 'main',
+          actionType: thread.actionType || 'ask',
+          parentThreadId: thread.parentThreadId || undefined,
+        }));
+        
+        setThreads(loadedThreads);
+        
+        // Set active thread
+        setActiveThreadId(state.activeThreadId || null);
+        
+        // Load main chat messages - try different approaches
+        if (state.mainMessages && state.mainMessages.length > 0) {
+          console.log('📧 Loading main chat messages:', state.mainMessages.length);
+          
+          // Try the setMessages method if it exists
+          if (mainChat.setMessages && typeof mainChat.setMessages === 'function') {
+            console.log('✅ Using setMessages method');
+            mainChat.setMessages(state.mainMessages);
+          } else {
+            console.warn('⚠️ setMessages method not available on useChat hook');
+            // Alternative approach: We'll need to manually populate the messages
+            // This is a limitation - the useChat hook may not support direct message setting
+            console.log('ℹ️ Note: Messages may not load directly due to useChat limitations');
+            console.log('💡 Consider refreshing the conversation or manually re-asking questions');
+          }
+        }
+        
+        // Reset UI state
+        setExpandedThread('main');
+        setCollapsedRows(new Set());
+        setCollapsedContexts(new Set());
+        setManualMainWidth(null);
+        
+        // Clear context menu
+        setShowContextMenu(false);
+        setSelectedText('');
+        setSelectedMessageId('');
+        
+        console.log('✅ Deep dive state loaded successfully');
+      }, 100);
+      
+    } catch (error) {
+      console.error('❌ Error loading deep dive state:', error);
+      throw error;
+    }
+  };
+
   // Function to clear all threads and main chat for a fresh start
   const clearAllAndStartFresh = () => {
     // Clear all threads
@@ -220,7 +302,9 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   // Expose functions to parent component
   useImperativeHandle(ref, () => ({
     copyAllAIResponses,
-    clearAllAndStartFresh
+    clearAllAndStartFresh,
+    getCurrentState,
+    loadState,
   }));
 
   const handleTextSelection = React.useCallback((messageId: string, isFromThread: boolean = false, threadId?: string) => {
