@@ -22,6 +22,18 @@ export interface Thread {
   actionType?: 'ask' | 'details' | 'simplify' | 'examples' | 'links' | 'videos'; // Track which context action was used
 }
 
+// Mobile selection state interface
+interface MobileSelection {
+  isActive: boolean;
+  startOffset: number;
+  endOffset: number;
+  text: string;
+  messageElement: HTMLElement | null;
+  messageId: string;
+  isFromThread: boolean;
+  threadId?: string;
+}
+
 type ModelProvider = 'openai' | 'claude' | 'anthropic';
 
 // Custom hook for thread chat instances - creates isolated chat for each thread
@@ -82,6 +94,31 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   // Fullscreen state for threads
   const [fullscreenThread, setFullscreenThread] = useState<string | null>(null);
   
+  // Mobile selection state
+  const [mobileSelection, setMobileSelection] = useState<MobileSelection>({
+    isActive: false,
+    startOffset: 0,
+    endOffset: 0,
+    text: '',
+    messageElement: null,
+    messageId: '',
+    isFromThread: false,
+    threadId: undefined
+  });
+  const [showMobileSelectionHandles, setShowMobileSelectionHandles] = useState(false);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  
+  // Touch event state
+  const [touchState, setTouchState] = useState({
+    lastTapTime: 0,
+    tapCount: 0,
+    isLongPress: false,
+    longPressTimer: null as NodeJS.Timeout | null,
+    startX: 0,
+    startY: 0,
+    isDragging: false
+  });
+  
   // Store chat instances for each thread - each thread gets its own isolated chat
   const [threadChatInstances, setThreadChatInstances] = useState<{[key: string]: any}>({});
   
@@ -111,6 +148,232 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
       console.error('Main chat error:', error);
     },
   });
+
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+                      ('ontouchstart' in window) || 
+                      (window.innerWidth <= 768);
+      setIsMobileDevice(isMobile);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Mobile touch handlers
+  const handleTouchStart = React.useCallback((e: TouchEvent, messageId: string, isFromThread: boolean, threadId?: string) => {
+    const touch = e.touches[0];
+    const currentTime = Date.now();
+    const target = e.target as HTMLElement;
+    
+    // Clear any existing long press timer
+    if (touchState.longPressTimer) {
+      clearTimeout(touchState.longPressTimer);
+    }
+    
+    // Check for double tap
+    const timeDiff = currentTime - touchState.lastTapTime;
+    const isDoubleTap = timeDiff < 300 && touchState.tapCount === 1;
+    
+    if (isDoubleTap) {
+      // Double tap detected - start selection process
+      setTouchState(prev => ({
+        ...prev,
+        tapCount: 2,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        isLongPress: false,
+        longPressTimer: setTimeout(() => {
+          // Long press after double tap - start selection
+          const messageElement = target.closest('[data-role="assistant"]') as HTMLElement;
+          if (messageElement) {
+            startMobileSelection(touch, messageElement, messageId, isFromThread, threadId);
+          }
+        }, 500)
+      }));
+    } else {
+      // Single tap
+      setTouchState(prev => ({
+        ...prev,
+        lastTapTime: currentTime,
+        tapCount: 1,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        isLongPress: false,
+        longPressTimer: null
+      }));
+    }
+  }, [touchState]);
+
+  const startMobileSelection = (touch: Touch, messageElement: HTMLElement, messageId: string, isFromThread: boolean, threadId?: string) => {
+    const textContent = messageElement.textContent || '';
+    const rect = messageElement.getBoundingClientRect();
+    const relativeX = touch.clientX - rect.left;
+    const relativeY = touch.clientY - rect.top;
+    
+    // Find approximate text offset based on touch position
+    const charOffset = estimateTextOffset(messageElement, relativeX, relativeY);
+    
+    setMobileSelection({
+      isActive: true,
+      startOffset: charOffset,
+      endOffset: charOffset + 10, // Start with a small selection
+      text: textContent.substring(charOffset, charOffset + 10),
+      messageElement,
+      messageId,
+      isFromThread,
+      threadId
+    });
+    
+    setTouchState(prev => ({ ...prev, isDragging: true }));
+    highlightMobileSelection(messageElement, charOffset, charOffset + 10);
+  };
+
+  const handleTouchMove = React.useCallback((e: TouchEvent) => {
+    if (!mobileSelection.isActive || !touchState.isDragging || !mobileSelection.messageElement) return;
+    
+    const touch = e.touches[0];
+    const rect = mobileSelection.messageElement.getBoundingClientRect();
+    const relativeX = touch.clientX - rect.left;
+    const relativeY = touch.clientY - rect.top;
+    
+    const newOffset = estimateTextOffset(mobileSelection.messageElement, relativeX, relativeY);
+    const textContent = mobileSelection.messageElement.textContent || '';
+    
+    const startOffset = Math.min(mobileSelection.startOffset, newOffset);
+    const endOffset = Math.max(mobileSelection.startOffset, newOffset);
+    
+    setMobileSelection(prev => ({
+      ...prev,
+      endOffset,
+      text: textContent.substring(startOffset, endOffset)
+    }));
+    
+    highlightMobileSelection(mobileSelection.messageElement, startOffset, endOffset);
+  }, [mobileSelection, touchState]);
+
+  const handleTouchEnd = React.useCallback(() => {
+    if (touchState.longPressTimer) {
+      clearTimeout(touchState.longPressTimer);
+    }
+    
+    if (mobileSelection.isActive && touchState.isDragging) {
+      // Show selection handles for adjustment
+      setShowMobileSelectionHandles(true);
+      setTouchState(prev => ({ ...prev, isDragging: false }));
+    }
+  }, [mobileSelection, touchState]);
+
+  // Helper function to estimate text offset from coordinates
+  const estimateTextOffset = (element: HTMLElement, x: number, y: number): number => {
+    const textContent = element.textContent || '';
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    const lineHeight = parseInt(style.lineHeight) || parseInt(style.fontSize) * 1.2;
+    
+    // Rough estimation based on character width and line position
+    const avgCharWidth = parseInt(style.fontSize) * 0.6;
+    const lineNumber = Math.floor(y / lineHeight);
+    const charInLine = Math.floor(x / avgCharWidth);
+    
+    // This is a rough estimation - in a real implementation you'd want more precise calculation
+    const estimatedOffset = Math.min(lineNumber * 50 + charInLine, textContent.length - 1);
+    return Math.max(0, estimatedOffset);
+  };
+
+  // Helper function to highlight selected text
+  const highlightMobileSelection = (element: HTMLElement, startOffset: number, endOffset: number) => {
+    const textContent = element.textContent || '';
+    const selectedText = textContent.substring(startOffset, endOffset);
+    
+    // Create a temporary selection to show visual feedback
+    const range = document.createRange();
+    const walker = document.createTreeWalker(
+      element,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+    
+    let currentOffset = 0;
+    let startNode: Node | null = null;
+    let endNode: Node | null = null;
+    let startNodeOffset = 0;
+    let endNodeOffset = 0;
+    
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const nodeLength = node.textContent?.length || 0;
+      
+      if (!startNode && currentOffset + nodeLength > startOffset) {
+        startNode = node;
+        startNodeOffset = startOffset - currentOffset;
+      }
+      
+      if (currentOffset + nodeLength >= endOffset) {
+        endNode = node;
+        endNodeOffset = endOffset - currentOffset;
+        break;
+      }
+      
+      currentOffset += nodeLength;
+    }
+    
+    if (startNode && endNode) {
+      range.setStart(startNode, startNodeOffset);
+      range.setEnd(endNode, endNodeOffset);
+      
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+  };
+
+  const commitMobileSelection = () => {
+    if (mobileSelection.isActive && mobileSelection.text.length >= 10) {
+      setSelectedText(mobileSelection.text);
+      setSelectedMessageId(mobileSelection.messageId);
+      setContextMenuSource({ 
+        messageId: mobileSelection.messageId, 
+        isFromThread: mobileSelection.isFromThread, 
+        threadId: mobileSelection.threadId 
+      });
+      setShowContextMenu(true);
+    }
+    
+    // Reset mobile selection state
+    setMobileSelection({
+      isActive: false,
+      startOffset: 0,
+      endOffset: 0,
+      text: '',
+      messageElement: null,
+      messageId: '',
+      isFromThread: false,
+      threadId: undefined
+    });
+    setShowMobileSelectionHandles(false);
+  };
+
+  const cancelMobileSelection = () => {
+    // Clear any selection
+    window.getSelection()?.removeAllRanges();
+    
+    // Reset mobile selection state
+    setMobileSelection({
+      isActive: false,
+      startOffset: 0,
+      endOffset: 0,
+      text: '',
+      messageElement: null,
+      messageId: '',
+      isFromThread: false,
+      threadId: undefined
+    });
+    setShowMobileSelectionHandles(false);
+  };
 
   // Function to expand all collapsed rows
   const expandAllRows = () => {
@@ -846,8 +1109,14 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     const isUser = message.role === 'user';
     
     const handleMouseUp = React.useCallback(() => {
-      if (!isUser) {
+      if (!isUser && !isMobileDevice) {
         handleTextSelection(message.id, isThread, threadId);
+      }
+    }, [message.id, isThread, threadId, isUser]);
+
+    const handleTouchStartMessage = React.useCallback((e: React.TouchEvent) => {
+      if (!isUser && isMobileDevice) {
+        handleTouchStart(e.nativeEvent, message.id, isThread, threadId);
       }
     }, [message.id, isThread, threadId, isUser]);
     
@@ -860,6 +1129,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
               : 'bg-card/80 text-white cursor-text select-text border-custom backdrop-blur-sm'
           }`}
           onMouseUp={handleMouseUp}
+          onTouchStart={handleTouchStartMessage}
           data-role={message.role}
         >
           <div className="whitespace-pre-wrap text-sm leading-relaxed">
@@ -867,7 +1137,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           </div>
           {!isUser && (
             <div className="mt-2 text-xs text-muted opacity-60">
-              Select text to create a new thread
+              {isMobileDevice ? 'Double-tap and hold to select text and create a new thread' : 'Select text to create a new thread'}
             </div>
           )}
         </div>
@@ -1365,6 +1635,27 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     );
   };
 
+  // Add touch event listeners for mobile
+  useEffect(() => {
+    if (!isMobileDevice) return;
+
+    const handleGlobalTouchMove = (e: TouchEvent) => {
+      handleTouchMove(e);
+    };
+
+    const handleGlobalTouchEnd = (e: TouchEvent) => {
+      handleTouchEnd();
+    };
+
+    document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
+    document.addEventListener('touchend', handleGlobalTouchEnd);
+
+    return () => {
+      document.removeEventListener('touchmove', handleGlobalTouchMove);
+      document.removeEventListener('touchend', handleGlobalTouchEnd);
+    };
+  }, [isMobileDevice, handleTouchMove, handleTouchEnd]);
+
   return (
     <div 
       className="h-full p-4" 
@@ -1372,8 +1663,11 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         // Only close context menu if clicking outside of it and the preview window
         if (!showContextMenu) return;
         const target = e.target as HTMLElement;
-        if (!target.closest('[data-context-menu]') && !target.closest('[data-context-preview]')) {
+        if (!target.closest('[data-context-menu]') && !target.closest('[data-context-preview]') && !target.closest('[data-mobile-selection]')) {
           setShowContextMenu(false);
+          if (isMobileDevice) {
+            cancelMobileSelection();
+          }
         }
       }}
       style={{
@@ -1537,6 +1831,44 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         )}
       </div>
 
+      {/* Mobile Selection Interface */}
+      {isMobileDevice && showMobileSelectionHandles && mobileSelection.isActive && (
+        <div 
+          data-mobile-selection
+          className="fixed inset-0 z-[99998] pointer-events-none"
+        >
+          {/* Selection Adjustment UI */}
+          <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-800 border border-slate-600 rounded-lg shadow-2xl p-4 pointer-events-auto">
+            <div className="text-center mb-3">
+              <div className="text-sm text-white font-semibold mb-1">Selected Text</div>
+              <div className="text-xs text-gray-300 max-w-sm overflow-hidden">
+                "{mobileSelection.text.length > 100 ? mobileSelection.text.substring(0, 100) + '...' : mobileSelection.text}"
+              </div>
+            </div>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={commitMobileSelection}
+                className="px-4 py-2 bg-accent-blue text-white rounded-lg text-sm font-medium hover:bg-accent-blue/80 transition-colors"
+                disabled={mobileSelection.text.length < 10}
+              >
+                Create Thread
+              </button>
+              <button
+                onClick={cancelMobileSelection}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-500 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+            {mobileSelection.text.length < 10 && (
+              <div className="mt-2 text-xs text-amber-400 text-center">
+                Selection too short. Please select at least 10 characters.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Context Preview Window - Shows selected text */}
       {showContextMenu && (
         <div 
@@ -1544,7 +1876,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           className="fixed bg-slate-800 border border-slate-600 rounded-lg shadow-2xl min-w-[300px] max-w-[500px] z-[100000]"
           style={{ 
             left: '50%',
-            top: '35%', // Position in upper-middle of screen
+            top: isMobileDevice ? '25%' : '35%', // Position higher on mobile to avoid keyboard
             transform: 'translate(-50%, -50%)', // Center both horizontally and vertically
             pointerEvents: 'auto' // Ensure it can be clicked
           }}
@@ -1572,7 +1904,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           className="fixed bg-slate-800 border border-slate-600 rounded-lg shadow-2xl py-2 min-w-[240px] z-[99999]"
           style={{ 
             left: '50%',
-            top: '55%', // Position below the preview window
+            top: isMobileDevice ? '45%' : '55%', // Position higher on mobile to avoid keyboard
             transform: 'translate(-50%, -50%)', // Center both horizontally and vertically
             pointerEvents: 'auto' // Ensure it can be clicked
           }}
@@ -1630,7 +1962,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
               <button
                 key={item.action}
                 onClick={item.onClick}
-                className={`w-full px-3 py-2 text-left text-sm font-medium transition-all duration-200 flex items-center gap-3 hover:scale-[1.02] ${item.colorScheme.bg}/20 hover:${item.colorScheme.bg}/30 border-l-4 ${item.colorScheme.border} mx-1 my-1 rounded-r-lg`}
+                onTouchStart={(e) => e.stopPropagation()} // Ensure touch events work on mobile
+                className={`w-full px-3 py-2 text-left text-sm font-medium transition-all duration-200 flex items-center gap-3 hover:scale-[1.02] ${item.colorScheme.bg}/20 hover:${item.colorScheme.bg}/30 border-l-4 ${item.colorScheme.border} mx-1 my-1 rounded-r-lg ${isMobileDevice ? 'py-3' : ''}`}
               >
                 <div className={`w-6 h-6 rounded-full ${item.colorScheme.bg} flex items-center justify-center text-xs`}>
                   {item.icon}
