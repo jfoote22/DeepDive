@@ -1392,7 +1392,7 @@ Question: ${threadChat.input}`;
           </div>
           <div className="py-2 px-3 max-h-32 overflow-y-auto">
             <div className="text-sm text-white leading-relaxed">
-              "{selectedText}"
+              &quot;{selectedText}&quot;
             </div>
           </div>
           <div className="px-3 py-2 text-xs text-muted text-center border-t border-slate-600">
