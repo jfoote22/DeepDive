@@ -25,7 +25,7 @@ export interface Thread {
 type ModelProvider = 'openai' | 'claude' | 'anthropic';
 
 // Custom hook for thread chat instances - creates isolated chat for each thread
-function useThreadChat(selectedModel: ModelProvider, threadId: string) {
+function useThreadChat(selectedModel: ModelProvider, threadId: string, initialMessages?: Message[]) {
   const getApiEndpoint = (model: ModelProvider) => {
     switch (model) {
       case 'openai':
@@ -39,10 +39,18 @@ function useThreadChat(selectedModel: ModelProvider, threadId: string) {
     }
   };
 
+  // Convert our Message format to the format expected by useChat
+  const formattedInitialMessages = initialMessages?.map(msg => ({
+    id: msg.id,
+    content: msg.content,
+    role: msg.role as 'user' | 'assistant',
+  })) || [];
+
   // Create a unique chat instance for this specific thread
   return useChat({
     id: `thread-${threadId}`, // Unique ID ensures complete isolation
     api: getApiEndpoint(selectedModel),
+    initialMessages: formattedInitialMessages,
     onError: (error) => {
       console.error(`Thread ${threadId} chat error:`, error);
     },
@@ -74,6 +82,9 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   
   // Store chat instances for each thread - each thread gets its own isolated chat
   const [threadChatInstances, setThreadChatInstances] = useState<{[key: string]: any}>({});
+  
+  // Track messages that need to be loaded into thread chat instances
+  const [threadMessagesToLoad, setThreadMessagesToLoad] = useState<{[key: string]: Message[]}>({});
 
   const getApiEndpoint = (model: ModelProvider) => {
     switch (model) {
@@ -229,6 +240,15 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           parentThreadId: thread.parentThreadId || undefined,
         }));
         
+        // Store thread messages to be loaded into chat instances when they're ready
+        const messagesToLoad: {[key: string]: Message[]} = {};
+        loadedThreads.forEach((thread: Thread) => {
+          if (thread.messages && thread.messages.length > 0) {
+            messagesToLoad[thread.id] = thread.messages;
+          }
+        });
+        setThreadMessagesToLoad(messagesToLoad);
+        
         setThreads(loadedThreads);
         
         // Set active thread
@@ -284,6 +304,9 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     
     // Clear any stored thread chat instances
     setThreadChatInstances({});
+    
+    // Clear thread messages to load
+    setThreadMessagesToLoad({});
     
     // Reset UI state
     setExpandedThread('main');
@@ -785,8 +808,25 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   MessageContent.displayName = 'MessageContent';
 
   const ThreadPanel = ({ thread }: { thread: Thread }) => {
-    // Create a dedicated, isolated chat instance for this specific thread
-    const threadChat = useThreadChat(selectedModel, thread.id);
+    // Get initial messages for this thread if available
+    const initialMessages = threadMessagesToLoad[thread.id] || thread.messages || [];
+    
+    // Create a dedicated, isolated chat instance for this specific thread with initial messages
+    const threadChat = useThreadChat(selectedModel, thread.id, initialMessages);
+    
+    // Clear the messages from loading queue when thread is rendered with initial messages
+    React.useEffect(() => {
+      if (threadMessagesToLoad[thread.id] && threadMessagesToLoad[thread.id].length > 0) {
+        console.log(`✅ Thread ${thread.id} initialized with ${threadMessagesToLoad[thread.id].length} messages`);
+        
+        // Clear the messages from the loading queue since they're now loaded via initialMessages
+        setThreadMessagesToLoad(prev => {
+          const updated = { ...prev };
+          delete updated[thread.id];
+          return updated;
+        });
+      }
+    }, [thread.id]);
     
     // Thread automatically includes context with user messages when they ask questions
     
