@@ -651,63 +651,58 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     </div>
   );
 
-  const ChatInput = ({ isThread = false, onSubmit, input, handleInputChange, isLoading, onStop }: any) => (
-    <form onSubmit={onSubmit} className="w-full">
-      <div className="flex space-x-3">
-        <textarea
-          value={input}
-          onChange={handleInputChange}
-          placeholder={isThread ? "Ask about the selected context..." : "Type your message..."}
+  const handleMainSubmit = (e: any) => {
+    e.preventDefault();
+    if (!mainChat.input.trim()) return;
+    // Append the user message to the main chat (identical to thread behavior)
+    mainChat.append({
+      role: 'user',
+      content: mainChat.input.trim(),
+    });
+    // Clear the input after sending
+    mainChat.setInput('');
+  };
+
+  const ChatInput = ({ isThread = false, onSubmit, input, handleInputChange, isLoading }: any) => {
+    const [localInput, setLocalInput] = useState('');
+
+    const handleSubmit = (e: any) => {
+      e.preventDefault();
+      if (!localInput.trim()) return;
+      
+      // If this is the main chat, use mainChat.append directly
+      if (!isThread && mainChat) {
+        mainChat.append({
+          role: 'user',
+          content: localInput.trim()
+        });
+      } else {
+        // For threads, use the passed onSubmit
+        onSubmit({ preventDefault: () => {}, target: { value: localInput } });
+      }
+      setLocalInput('');
+    };
+
+    return (
+      <form onSubmit={handleSubmit} className="w-full flex gap-2">
+        <input 
+          type="text"
+          value={localInput}
+          onChange={(e) => setLocalInput(e.target.value)}
+          className="flex-1 p-4 bg-white text-black border border-gray-300"
+          placeholder={isThread ? "Ask about the selected context..." : "Type a message"}
           disabled={isLoading}
-          className="flex-1 p-4 border border-custom bg-white/90 backdrop-blur-sm rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue/50 disabled:bg-gray-200 disabled:cursor-not-allowed text-black placeholder-gray-500 transition-all duration-200"
-          rows={1}
-          style={{ minHeight: '56px', maxHeight: '120px' }}
-          onKeyDown={(e: any) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              if (!isLoading && input.trim()) {
-                onSubmit(e);
-              }
-            }
-          }}
         />
-        <div className="flex space-x-2">
-          {/* Stop button - only show when loading */}
-          {isLoading && (
-            <button
-              type="button"
-              onClick={onStop}
-              className="bg-accent-red text-white px-4 py-4 rounded-lg font-medium hover:bg-accent-red/80 transition-all duration-200 shadow-lg"
-              title="Stop response"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10h6v4H9z" />
-              </svg>
-            </button>
-          )}
-          {/* Submit button */}
-          <button
-            type="submit"
-            disabled={isLoading || !input.trim()}
-            className="bg-accent-blue text-white px-6 py-4 rounded-lg font-medium hover:bg-accent-blue/80 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all duration-200 shadow-lg"
-          >
-            {isLoading ? (
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-              </div>
-            ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-            )}
-          </button>
-        </div>
-      </div>
-    </form>
-  );
+        <button 
+          type="submit" 
+          className="px-4 bg-blue-500 text-white disabled:bg-gray-400"
+          disabled={isLoading || !localInput.trim()}
+        >
+          {isLoading ? 'Sending...' : 'Send'}
+        </button>
+      </form>
+    );
+  };
 
   // Helper function to get action label based on action type
   const getActionLabel = (actionType?: string) => {
@@ -1101,7 +1096,6 @@ Question: ${threadChat.input}`;
             input={threadChat.input}
             handleInputChange={threadChat.handleInputChange}
             isLoading={threadChat.isLoading}
-            onStop={threadChat.stop}
           />
         </div>
       </div>
@@ -1458,11 +1452,10 @@ Question: ${threadChat.input}`;
           <div className="border-t border-custom bg-card/60 backdrop-blur-sm p-6">
             <div className="mx-auto max-w-full">
               <ChatInput 
-                onSubmit={mainChat.handleSubmit}
+                onSubmit={handleMainSubmit}
                 input={mainChat.input}
                 handleInputChange={mainChat.handleInputChange}
                 isLoading={mainChat.isLoading}
-                onStop={mainChat.stop}
               />
             </div>
           </div>
