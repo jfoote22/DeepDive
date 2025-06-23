@@ -1209,6 +1209,26 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     return rows.filter(row => row.length > 0); // Remove empty rows
   };
 
+  // Expanded view - full thread panels with collapse button
+  const expandRow = (rowIndex: number) => {
+    // Get all row indices except the current one
+    const allRowIndices = getThreadRows().map((_, index) => index);
+    const otherRowIndices = allRowIndices.filter(index => index !== rowIndex);
+    
+    // Collapse all other rows and expand the current one
+    setCollapsedRows(new Set(otherRowIndices));
+  };
+
+  const closeRow = (rowThreads: Thread[]) => {
+    // Get all thread IDs from the threads passed to this row
+    const threadIds = rowThreads.map(t => t.id);
+    
+    // Close each thread in the row
+    threadIds.forEach(threadId => {
+      closeThread(threadId);
+    });
+  };
+
   // ThreadRow component to handle a single row of threads
   const ThreadRow = ({ threads: rowThreads, rowIndex }: { threads: Thread[], rowIndex: number }) => {
     const isCollapsed = collapsedRows.has(rowIndex);
@@ -1277,12 +1297,32 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
               </svg>
             </button>
+            <button
+              onClick={() => expandRow(rowIndex)}
+              className="text-accent-green hover:text-accent-green/80 transition-colors"
+              title="Expand this row and collapse others"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              </svg>
+            </button>
             <span className="text-xs text-white font-medium">
               Row {rowIndex + 1}
             </span>
           </div>
-          <div className="text-xs text-muted">
-            {rowThreads.length} thread{rowThreads.length !== 1 ? 's' : ''}
+          <div className="flex items-center gap-4">
+            <div className="text-xs text-muted">
+              {rowThreads.length} thread{rowThreads.length !== 1 ? 's' : ''}
+            </div>
+            <button
+              onClick={() => closeRow(rowThreads)}
+              className="text-gray-400 hover:text-accent-red transition-colors"
+              title="Close all threads in this row"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
         {/* Thread panels container */}
