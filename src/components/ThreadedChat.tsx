@@ -1295,6 +1295,13 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                 </span>
               </button>
               <button
+                onClick={() => rerunThreadContext(thread)}
+                className="p-2 rounded-lg hover:bg-hover transition-colors text-gray-400 hover:text-accent-orange"
+                title={`Rerun original ${getActionLabel(thread.actionType)} action`}
+              >
+                <span className="text-lg font-bold">↻</span>
+              </button>
+              <button
                 onClick={() => toggleThreadExpansion(thread.id)}
                 className={`p-2 rounded-lg hover:bg-hover transition-colors ${
                   isExpanded ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
@@ -1399,6 +1406,43 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   // Toggle thread fullscreen mode
   const toggleThreadFullscreen = (threadId: string) => {
     setFullscreenThread(prev => prev === threadId ? null : threadId);
+  };
+
+  // Rerun the original context for a thread
+  const rerunThreadContext = (thread: Thread) => {
+    const threadChat = threadChatRefs.current[thread.id];
+    if (!threadChat || !thread.selectedContext) return;
+
+    let messageToSend = '';
+    
+    // Construct the message based on the original action type
+    switch (thread.actionType) {
+      case 'details':
+        messageToSend = `Please provide more details about: "${thread.selectedContext}"`;
+        break;
+      case 'links':
+        messageToSend = `Please provide relevant links and resources related to: "${thread.selectedContext}". Include authoritative sources, documentation, articles, and useful websites that would help someone learn more about this topic.`;
+        break;
+      case 'videos':
+        messageToSend = `Please suggest relevant YouTube videos, tutorials, and video content related to: "${thread.selectedContext}". Include educational videos, tutorials, documentaries, and other video resources that would help understand this topic better.`;
+        break;
+      case 'examples':
+        messageToSend = `Please provide 3-5 concrete, practical examples that illustrate or relate to: "${thread.selectedContext}". Make the examples diverse and easy to understand.`;
+        break;
+      case 'simplify':
+        messageToSend = `Please explain this in the simplest terms possible, as if you're teaching it to someone who is completely new to the topic: "${thread.selectedContext}"`;
+        break;
+      case 'ask':
+      default:
+        messageToSend = thread.selectedContext;
+        break;
+    }
+
+    // Send the message to the thread
+    threadChat.append({
+      role: 'user',
+      content: messageToSend
+    });
   };
 
   // Handle manual resize
