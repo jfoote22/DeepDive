@@ -654,6 +654,12 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   }, []);
 
   const createNewThread = (context: string, autoExpand: boolean = false, autoSend: boolean = false, actionType: 'ask' | 'details' | 'simplify' | 'examples' | 'links' | 'videos' = 'ask') => {
+    // Auto-exit fullscreen mode when creating new thread to ensure proper functionality
+    const wasInFullscreen = !!fullscreenThread;
+    if (fullscreenThread) {
+      setFullscreenThread(null);
+    }
+    
     // Create a unique thread ID with timestamp and random component for complete uniqueness
     const newThreadId = `thread-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
@@ -744,13 +750,16 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     setShowContextMenu(false);
 
     // Handle auto-expansion for "Get more details"
+    // Add extra delay if we were in fullscreen to allow layout to settle
+    const baseDelay = wasInFullscreen ? 500 : 100;
+    
     if (autoExpand) {
       setTimeout(() => {
         const event = new CustomEvent('autoExpandThread', {
           detail: { threadId: newThreadId, context: context }
         });
         window.dispatchEvent(event);
-      }, 100);
+      }, baseDelay);
     }
     
     // Handle auto-send for "Simplify this" and "Give examples"
@@ -760,7 +769,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           detail: { threadId: newThreadId, message: context }
         });
         window.dispatchEvent(event);
-      }, 100);
+      }, baseDelay);
     }
   };
 
