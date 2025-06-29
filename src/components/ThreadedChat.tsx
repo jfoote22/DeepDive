@@ -467,12 +467,41 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     }
   };
 
+  // Force update thread messages before saving
+  const forceUpdateThreadMessages = () => {
+    console.log('🔄 Force updating thread messages before save...');
+    
+    // Update thread messages from live chat instances
+    setThreads(prev => prev.map(thread => {
+      const threadChatInstance = threadChatRefs.current[thread.id];
+      
+      if (threadChatInstance && threadChatInstance.messages) {
+        const updatedMessages = threadChatInstance.messages.map((msg: any) => ({
+          id: msg.id,
+          content: msg.content,
+          role: msg.role,
+          timestamp: msg.timestamp || Date.now(),
+        }));
+        
+        console.log(`🔄 Updated thread ${thread.id} with ${updatedMessages.length} messages`);
+        
+        return {
+          ...thread,
+          messages: updatedMessages,
+        };
+      }
+      
+      return thread;
+    }));
+  };
+
   // Function to get current state for saving
   const getCurrentState = () => {
-    // Collect messages from all thread chat instances
+    // Collect messages from all thread chat instances with improved fallback handling
     const threadsWithMessages = threads.map(thread => {
       const threadChatInstance = threadChatRefs.current[thread.id];
       let currentMessages = thread.messages || [];
+      let messageSource = 'static';
       
       // If we have a live chat instance, get its current messages
       if (threadChatInstance && threadChatInstance.messages) {
@@ -482,7 +511,14 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           role: msg.role,
           timestamp: msg.timestamp || Date.now(),
         }));
+        messageSource = 'live';
+      } else if (threadMessagesToLoad[thread.id]) {
+        // Fallback to messages that were queued for loading
+        currentMessages = threadMessagesToLoad[thread.id];
+        messageSource = 'queued';
       }
+      
+      console.log(`📊 Thread ${thread.id}: ${currentMessages.length} messages from ${messageSource} source`);
       
       return {
         ...thread,
@@ -490,15 +526,30 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
       };
     });
 
+    // Enhanced logging with source information
     console.log('📊 getCurrentState - Thread message counts:', 
-      threadsWithMessages.map(t => ({ id: t.id, messageCount: t.messages.length }))
+      threadsWithMessages.map(t => ({ 
+        id: t.id, 
+        messageCount: t.messages.length,
+        title: t.title?.substring(0, 30) || 'Untitled'
+      }))
     );
+
+    // Include UI state for better restoration
+    const uiState = {
+      collapsedRows: Array.from(collapsedRows),
+      collapsedContexts: Array.from(collapsedContexts),
+      expandedThread: expandedThread,
+      fullscreenThread: fullscreenThread,
+      manualMainWidth: manualMainWidth,
+    };
 
     return {
       mainMessages: mainChat.messages,
       threads: threadsWithMessages,
       selectedModel: selectedModel,
       activeThreadId: activeThreadId,
+      uiState: uiState, // New: preserve UI state
     };
   };
 
@@ -563,11 +614,23 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           }
         }
         
-        // Reset UI state
-        setExpandedThread('main');
-        setCollapsedRows(new Set());
-        setCollapsedContexts(new Set());
-        setManualMainWidth(null);
+        // Restore UI state if available
+        if (state.uiState) {
+          console.log('🎨 Restoring UI state:', state.uiState);
+          setExpandedThread(state.uiState.expandedThread || 'main');
+          setCollapsedRows(new Set(state.uiState.collapsedRows || []));
+          setCollapsedContexts(new Set(state.uiState.collapsedContexts || []));
+          setManualMainWidth(state.uiState.manualMainWidth || null);
+          setFullscreenThread(state.uiState.fullscreenThread || null);
+        } else {
+          // Fallback to default UI state for older saves
+          console.log('🎨 Using default UI state (older save format)');
+          setExpandedThread('main');
+          setCollapsedRows(new Set());
+          setCollapsedContexts(new Set());
+          setManualMainWidth(null);
+          setFullscreenThread(null);
+        }
         
         // Clear context menu
         setShowContextMenu(false);
@@ -623,6 +686,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     clearAllAndStartFresh,
     getCurrentState,
     loadState,
+    forceUpdateThreadMessages, // New: ensure all messages are captured before save
   }));
 
   const handleTextSelection = React.useCallback((messageId: string, isFromThread: boolean = false, threadId?: string) => {

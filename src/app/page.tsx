@@ -84,6 +84,13 @@ export default function Home() {
       setIsSaving(true);
       console.log('🚀 Starting save process...');
       
+      // Force update thread messages to ensure we capture everything
+      console.log('🔄 Ensuring all thread messages are captured...');
+      threadedChatRef.current?.forceUpdateThreadMessages();
+      
+      // Small delay to allow state updates to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       // Get current state from ThreadedChat
       const chatState = threadedChatRef.current?.getCurrentState();
       console.log('📊 Chat state retrieved:', {
