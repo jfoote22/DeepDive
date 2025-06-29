@@ -1237,73 +1237,87 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         className={`${threadPanelWidth} bg-card/60 backdrop-blur border-l-2 border-accent-blue/40 border-r border-custom shadow-lg flex flex-col h-full transition-all duration-300 ${isCollapsed || isMainExpanded ? 'min-w-80' : ''} rounded-lg overflow-hidden`}
         data-thread-id={thread.id}
       >
-        {/* Thread Header */}
+        {/* Thread Header - Improved Readability */}
         <div className={`flex-shrink-0 p-3 border-b-2 ${colorScheme.border} ${colorScheme.bg} shadow-sm`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {/* Large, prominent thread number */}
-              <div className={`text-2xl font-bold ${colorScheme.badgeText} ${colorScheme.badgeBg} px-3 py-1 rounded-lg border-2 ${colorScheme.badgeBorder} shadow-md`}>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              {/* Thread number badge */}
+              <div className={`text-lg font-bold ${colorScheme.badgeText} ${colorScheme.badgeBg} px-3 py-1 rounded-lg border-2 ${colorScheme.badgeBorder} shadow-sm flex-shrink-0`}>
                 #{threads.findIndex(t => t.id === thread.id) + 1}
               </div>
-              {/* Action label */}
-              <h3 className="font-semibold text-white text-sm">{getActionLabel(thread.actionType)}</h3>
-              {/* Context Source Information */}
-              <span className="font-semibold text-white text-sm">{getContextSource(thread)}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => toggleThreadFullscreen(thread.id)}
-                className={`p-1 rounded-lg hover:bg-hover transition-colors ${
-                  fullscreenThread === thread.id ? 'bg-accent-green/20 text-accent-green' : 'text-gray-400 hover:text-white'
-                }`}
-                title={fullscreenThread === thread.id ? 'Exit fullscreen' : 'Fullscreen thread'}
-              >
-                <span className="text-xl font-bold">
-                  {fullscreenThread === thread.id ? '⊡' : '⊞'}
+              
+              {/* Action and source info - always visible but condensed when collapsed */}
+              <div className={`flex items-center gap-2 bg-black/20 px-2 py-1 rounded-lg flex-shrink-0 ${isCollapsed ? 'max-w-32' : ''}`}>
+                <span className={`font-semibold text-white ${isCollapsed ? 'text-xs' : 'text-sm'} truncate`}>
+                  {getActionLabel(thread.actionType)}
                 </span>
-              </button>
-              <button
-                onClick={() => toggleThreadExpansion(thread.id)}
-                className={`p-1 rounded-lg hover:bg-hover transition-colors ${
-                  isExpanded ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
-                }`}
-                title={isExpanded ? 'Collapse thread' : 'Expand thread'}
-              >
-                <span className="text-xl font-bold">
-                  {isExpanded ? '←' : '→'}
-                </span>
-              </button>
-              <button
-                onClick={() => closeThread(thread.id)}
-                className="text-gray-400 hover:text-accent-red text-lg transition-colors"
-              >
-                ×
-              </button>
-            </div>
-          </div>
-          {thread.selectedContext && (
-            <div className="mt-2 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border border-gray-200/20 rounded-lg text-xs">
-              <div 
-                className="flex items-center justify-between p-3 cursor-pointer hover:bg-slate-800/30 transition-colors"
-                onClick={() => toggleContextCollapse(thread.id)}
-              >
-                <div className="font-medium text-accent-yellow">Context:</div>
-                <button className="text-accent-yellow hover:text-accent-yellow/80 transition-colors">
+                {!isCollapsed && (
+                  <>
+                    <span className="text-white/60 text-xs">•</span>
+                    <span className="text-white/80 text-xs">{getContextSource(thread)}</span>
+                  </>
+                )}
+              </div>
+              
+              {/* Context dropdown - only show when not collapsed to prioritize control buttons */}
+              {thread.selectedContext && !isCollapsed && (
+                <button
+                  onClick={() => toggleContextCollapse(thread.id)}
+                  className="flex items-center gap-2 bg-accent-yellow/20 text-accent-yellow hover:bg-accent-yellow/30 px-3 py-1 rounded-lg border border-accent-yellow/30 transition-all text-sm font-medium flex-shrink-0"
+                  title="Toggle context"
+                >
+                  <span>Context</span>
                   <svg 
                     className={`w-4 h-4 transition-transform duration-200 ${collapsedContexts.has(thread.id) ? 'rotate-180' : 'rotate-0'}`} 
                     fill="none" 
                     stroke="currentColor" 
                     viewBox="0 0 24 24"
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7m7 7V3" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
-              </div>
-              {collapsedContexts.has(thread.id) && (
-                <div className="px-3 pb-3">
-                  <div className="text-accent-yellow/90 italic bg-slate-800/30 p-2 rounded">&quot;{thread.selectedContext}&quot;</div>
-                </div>
               )}
+            </div>
+            
+            {/* Control buttons - always visible and prioritized */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => toggleThreadFullscreen(thread.id)}
+                className={`p-2 rounded-lg hover:bg-hover transition-colors ${
+                  fullscreenThread === thread.id ? 'bg-accent-green/20 text-accent-green' : 'text-gray-400 hover:text-white'
+                }`}
+                title={fullscreenThread === thread.id ? 'Exit fullscreen' : 'Fullscreen thread'}
+              >
+                <span className="text-lg font-bold">
+                  {fullscreenThread === thread.id ? '⊡' : '⊞'}
+                </span>
+              </button>
+              <button
+                onClick={() => toggleThreadExpansion(thread.id)}
+                className={`p-2 rounded-lg hover:bg-hover transition-colors ${
+                  isExpanded ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
+                }`}
+                title={isExpanded ? 'Collapse thread' : 'Expand thread'}
+              >
+                <span className="text-lg font-bold">
+                  {isExpanded ? '←' : '→'}
+                </span>
+              </button>
+              <button
+                onClick={() => closeThread(thread.id)}
+                className="text-gray-400 hover:text-accent-red text-lg transition-colors p-1"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+          
+          {/* Context content with better styling */}
+          {thread.selectedContext && collapsedContexts.has(thread.id) && (
+            <div className="mt-3 bg-gradient-to-r from-accent-yellow/10 to-accent-yellow/5 border-l-4 border-accent-yellow/50 rounded-r-lg p-3">
+              <div className="text-accent-yellow/90 italic text-sm leading-relaxed">
+                &quot;{thread.selectedContext.length > 150 ? thread.selectedContext.substring(0, 150) + '...' : thread.selectedContext}&quot;
+              </div>
             </div>
           )}
         </div>
