@@ -93,6 +93,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   const [collapsedContexts, setCollapsedContexts] = useState<Set<string>>(new Set());
   // Fullscreen state for threads
   const [fullscreenThread, setFullscreenThread] = useState<string | null>(null);
+  // Thread header color toggle state
+  const [threadHeaderColorsEnabled, setThreadHeaderColorsEnabled] = useState<boolean>(true);
   
   // Mobile selection state
   const [mobileSelection, setMobileSelection] = useState<MobileSelection>({
@@ -1012,63 +1014,63 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           bg: 'bg-cyan-500',
           border: 'border-cyan-500',
           text: 'text-white',
-          badgeBg: 'bg-white/20',
+          badgeBg: 'bg-cyan-500',
           badgeText: 'text-white',
-          badgeBorder: 'border-white/30'
+          badgeBorder: 'border-cyan-500'
         };
       case 'details':
         return {
           bg: 'bg-accent-green',
           border: 'border-accent-green',
           text: 'text-white',
-          badgeBg: 'bg-white/20',
+          badgeBg: 'bg-accent-green',
           badgeText: 'text-white',
-          badgeBorder: 'border-white/30'
+          badgeBorder: 'border-accent-green'
         };
       case 'simplify':
         return {
           bg: 'bg-accent-orange',
           border: 'border-accent-orange',
           text: 'text-white',
-          badgeBg: 'bg-white/20',
+          badgeBg: 'bg-accent-orange',
           badgeText: 'text-white',
-          badgeBorder: 'border-white/30'
+          badgeBorder: 'border-accent-orange'
         };
       case 'examples':
         return {
           bg: 'bg-accent-purple',
           border: 'border-accent-purple',
           text: 'text-white',
-          badgeBg: 'bg-white/20',
+          badgeBg: 'bg-accent-purple',
           badgeText: 'text-white',
-          badgeBorder: 'border-white/30'
+          badgeBorder: 'border-accent-purple'
         };
       case 'links':
         return {
           bg: 'bg-accent-blue',
           border: 'border-accent-blue',
           text: 'text-white',
-          badgeBg: 'bg-white/20',
+          badgeBg: 'bg-accent-blue',
           badgeText: 'text-white',
-          badgeBorder: 'border-white/30'
+          badgeBorder: 'border-accent-blue'
         };
       case 'videos':
         return {
           bg: 'bg-accent-yellow',
           border: 'border-accent-yellow',
           text: 'text-white',
-          badgeBg: 'bg-white/20',
-          badgeText: 'text-white',
-          badgeBorder: 'border-white/30'
+          badgeBg: 'bg-accent-yellow',
+          badgeText: 'text-black',
+          badgeBorder: 'border-accent-yellow'
         };
       default:
         return {
           bg: 'bg-muted',
           border: 'border-custom',
           text: 'text-white',
-          badgeBg: 'bg-white/20',
+          badgeBg: 'bg-muted',
           badgeText: 'text-white',
-          badgeBorder: 'border-white/30'
+          badgeBorder: 'border-custom'
         };
     }
   };
@@ -1238,10 +1240,10 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         data-thread-id={thread.id}
       >
         {/* Thread Header - Improved Readability */}
-        <div className={`flex-shrink-0 p-3 border-b-2 ${colorScheme.border} ${colorScheme.bg} shadow-sm`}>
+        <div className={`flex-shrink-0 p-3 border-b-2 ${threadHeaderColorsEnabled ? colorScheme.border : 'border-custom'} ${threadHeaderColorsEnabled ? colorScheme.bg : 'bg-card/80'} shadow-sm`}>
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              {/* Thread number badge */}
+              {/* Thread number badge - always keeps original action-type colors */}
               <div className={`text-lg font-bold ${colorScheme.badgeText} ${colorScheme.badgeBg} px-3 py-1 rounded-lg border-2 ${colorScheme.badgeBorder} shadow-sm flex-shrink-0`}>
                 #{threads.findIndex(t => t.id === thread.id) + 1}
               </div>
@@ -1516,6 +1518,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   // ThreadRow component to handle a single row of threads
   const ThreadRow = ({ threads: rowThreads, rowIndex }: { threads: Thread[], rowIndex: number }) => {
     const isCollapsed = collapsedRows.has(rowIndex);
+    const hasFullscreenInThisRow = rowThreads.some(thread => thread.id === fullscreenThread);
     
     if (isCollapsed) {
       // Collapsed view - thin horizontal bar with color indicators and context previews
@@ -1590,6 +1593,15 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
               </svg>
             </button>
+            <button
+              onClick={() => expandAllRows()}
+              className="text-accent-yellow hover:text-accent-yellow/80 transition-colors"
+              title="Expand all rows"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 4H6a2 2 0 00-2 2v2M8 4V2a2 2 0 012 2v2M8 4h2m0 0V2a2 2 0 012 2v2m0 0h2a2 2 0 002-2V4M8 20H6a2 2 0 01-2-2v-2M8 20v2a2 2 0 01-2-2v-2M8 20h2m0 0v2a2 2 0 002 2v2m0 0h2a2 2 0 002-2v-2M16 4v2M16 20v-2M4 16h2M20 16h-2" />
+              </svg>
+            </button>
             <span className="text-xs text-white font-medium">
               Row {rowIndex + 1}
             </span>
@@ -1610,7 +1622,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           </div>
         </div>
         {/* Thread panels container */}
-        <div className="flex-1 flex gap-2 min-h-0 overflow-hidden">
+        <div className={`flex-1 flex gap-2 min-h-0 ${hasFullscreenInThisRow ? 'overflow-visible' : 'overflow-hidden'}`}>
           {rowThreads
             .filter(thread => {
               // If any thread in this row is fullscreen, only show that thread
@@ -1792,6 +1804,28 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold text-white">Threads</h2>
                   <div className="flex items-center gap-3">
+                    {/* Thread Header Color Toggle */}
+                    <button
+                      onClick={() => setThreadHeaderColorsEnabled(!threadHeaderColorsEnabled)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-200 ${
+                        threadHeaderColorsEnabled 
+                          ? 'bg-accent-purple/20 text-accent-purple border-accent-purple/50 hover:bg-accent-purple/30' 
+                          : 'bg-card/60 text-muted border-custom hover:bg-hover hover:text-white'
+                      }`}
+                      title={threadHeaderColorsEnabled ? 'Disable thread header colors' : 'Enable thread header colors'}
+                    >
+                      <span className="text-xs font-medium">
+                        {threadHeaderColorsEnabled ? '🎨' : '⚫'}
+                      </span>
+                      <div className={`w-8 h-4 rounded-full transition-all duration-200 ${
+                        threadHeaderColorsEnabled ? 'bg-accent-purple' : 'bg-gray-600'
+                      }`}>
+                        <div className={`w-3 h-3 bg-white rounded-full mt-0.5 transition-transform duration-200 ${
+                          threadHeaderColorsEnabled ? 'translate-x-4' : 'translate-x-0.5'
+                        }`}></div>
+                      </div>
+                    </button>
+                    
                     {collapsedRows.size > 0 && (
                       <span className="text-sm text-muted bg-card/50 px-2 py-1 rounded-lg">
                         {collapsedRows.size} row{collapsedRows.size !== 1 ? 's' : ''} collapsed
@@ -1811,15 +1845,28 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
             <div className="flex-1 overflow-hidden p-2">
               <div className="h-full flex flex-col gap-2">
                 {threadRows
-                  .filter((rowThreads, rowIndex) => {
+                  .map((rowThreads, originalRowIndex) => ({ rowThreads, originalRowIndex }))
+                  .filter(({ rowThreads, originalRowIndex }) => {
                     // If any thread is fullscreen, only show the row containing that thread
                     if (fullscreenThread) {
                       return rowThreads.some(thread => thread.id === fullscreenThread);
                     }
                     return true;
                   })
-                  .map((rowThreads, rowIndex) => {
-                    const isCollapsed = collapsedRows.has(rowIndex);
+                  .map(({ rowThreads, originalRowIndex }) => {
+                    const isCollapsed = collapsedRows.has(originalRowIndex);
+                    const hasFullscreenInThisRow = rowThreads.some(thread => thread.id === fullscreenThread);
+                    
+                    // Special handling for fullscreen threads
+                    if (hasFullscreenInThisRow && fullscreenThread) {
+                      return (
+                        <div key={originalRowIndex} className="h-full">
+                          <ThreadRow threads={rowThreads} rowIndex={originalRowIndex} />
+                        </div>
+                      );
+                    }
+                    
+                    // Normal height calculation for non-fullscreen threads
                     const visibleRows = threadRows.filter((_, idx) => {
                       if (fullscreenThread) {
                         return threadRows[idx].some(thread => thread.id === fullscreenThread);
@@ -1834,8 +1881,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                         : "flex-1";
                     
                     return (
-                      <div key={rowIndex} className={heightClass}>
-                        <ThreadRow threads={rowThreads} rowIndex={rowIndex} />
+                      <div key={originalRowIndex} className={heightClass}>
+                        <ThreadRow threads={rowThreads} rowIndex={originalRowIndex} />
                       </div>
                     );
                   })}
