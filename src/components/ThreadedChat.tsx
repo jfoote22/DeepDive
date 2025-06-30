@@ -95,6 +95,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   const [fullscreenThread, setFullscreenThread] = useState<string | null>(null);
   // Thread header color toggle state
   const [threadHeaderColorsEnabled, setThreadHeaderColorsEnabled] = useState<boolean>(true);
+  // Global context visibility toggle state
+  const [showAllContexts, setShowAllContexts] = useState<boolean>(false);
   
   // Mobile selection state
   const [mobileSelection, setMobileSelection] = useState<MobileSelection>({
@@ -542,6 +544,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
       expandedThread: expandedThread,
       fullscreenThread: fullscreenThread,
       manualMainWidth: manualMainWidth,
+      threadHeaderColorsEnabled: threadHeaderColorsEnabled,
+      showAllContexts: showAllContexts,
     };
 
     return {
@@ -622,6 +626,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           setCollapsedContexts(new Set(state.uiState.collapsedContexts || []));
           setManualMainWidth(state.uiState.manualMainWidth || null);
           setFullscreenThread(state.uiState.fullscreenThread || null);
+          setThreadHeaderColorsEnabled(state.uiState.threadHeaderColorsEnabled !== undefined ? state.uiState.threadHeaderColorsEnabled : true);
+          setShowAllContexts(state.uiState.showAllContexts !== undefined ? state.uiState.showAllContexts : false);
         } else {
           // Fallback to default UI state for older saves
           console.log('🎨 Using default UI state (older save format)');
@@ -630,6 +636,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           setCollapsedContexts(new Set());
           setManualMainWidth(null);
           setFullscreenThread(null);
+          setThreadHeaderColorsEnabled(true);
+          setShowAllContexts(false);
         }
         
         // Clear context menu
@@ -671,6 +679,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     setCollapsedRows(new Set());
     setCollapsedContexts(new Set());
     setManualMainWidth(null);
+    setThreadHeaderColorsEnabled(true);
+    setShowAllContexts(false);
     
     // Clear context menu
     setShowContextMenu(false);
@@ -1476,6 +1486,22 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     });
   };
 
+  // Toggle all contexts visibility
+  const toggleAllContextsVisibility = () => {
+    setShowAllContexts(prev => {
+      const newShowAll = !prev;
+      if (newShowAll) {
+        // Show all contexts - clear the collapsed set
+        setCollapsedContexts(new Set());
+      } else {
+        // Hide all contexts - add all thread IDs to collapsed set
+        const allThreadIds = threads.map(thread => thread.id);
+        setCollapsedContexts(new Set(allThreadIds));
+      }
+      return newShowAll;
+    });
+  };
+
   // Toggle thread fullscreen mode
   const toggleThreadFullscreen = (threadId: string) => {
     setFullscreenThread(prev => prev === threadId ? null : threadId);
@@ -1939,6 +1965,28 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                       }`}>
                         <div className={`w-3 h-3 bg-white rounded-full mt-0.5 transition-transform duration-200 ${
                           threadHeaderColorsEnabled ? 'translate-x-4' : 'translate-x-0.5'
+                        }`}></div>
+                      </div>
+                    </button>
+
+                    {/* Context Visibility Toggle */}
+                    <button
+                      onClick={toggleAllContextsVisibility}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-200 ${
+                        showAllContexts 
+                          ? 'bg-accent-blue/20 text-accent-blue border-accent-blue/50 hover:bg-accent-blue/30' 
+                          : 'bg-card/60 text-muted border-custom hover:bg-hover hover:text-white'
+                      }`}
+                      title={showAllContexts ? 'Hide all thread contexts' : 'Show all thread contexts'}
+                    >
+                      <span className="text-xs font-medium">
+                        {showAllContexts ? '📋' : '📄'}
+                      </span>
+                      <div className={`w-8 h-4 rounded-full transition-all duration-200 ${
+                        showAllContexts ? 'bg-accent-blue' : 'bg-gray-600'
+                      }`}>
+                        <div className={`w-3 h-3 bg-white rounded-full mt-0.5 transition-transform duration-200 ${
+                          showAllContexts ? 'translate-x-4' : 'translate-x-0.5'
                         }`}></div>
                       </div>
                     </button>
