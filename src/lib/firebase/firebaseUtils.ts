@@ -15,6 +15,7 @@ import {
   where,
   orderBy,
   Timestamp,
+  getDoc,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -309,5 +310,132 @@ export const deleteDeepDive = async (deepDiveId: string) => {
   } catch (error) {
     console.error('❌ Error deleting deep dive:', error);
     throw new Error(`Failed to delete deep dive: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
+
+// Learning Data functions
+export interface LearningData {
+  mainResponses: Array<{ content: string; index: number; }>;
+  threadResponses: Array<{ 
+    content: string; 
+    threadTitle: string; 
+    context: string; 
+    threadIndex: number; 
+    responseIndex: number; 
+  }>;
+}
+
+export interface LearningDataDoc {
+  id?: string;
+  learningData: LearningData;
+  userId: string;
+  createdAt: Timestamp;
+  expiresAt: Timestamp; // Auto-delete after 24 hours
+}
+
+export const saveLearningData = async (learningData: LearningData) => {
+  console.log('🎓 Saving learning data to Firebase...');
+  
+  if (!auth.currentUser) {
+    console.error('❌ No authenticated user found');
+    throw new Error('User must be authenticated to save learning data');
+  }
+
+  try {
+    // Set expiration to 24 hours from now
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24);
+
+    const learningDataDoc: Omit<LearningDataDoc, 'id'> = {
+      learningData,
+      userId: auth.currentUser.uid,
+      createdAt: Timestamp.now(),
+      expiresAt: Timestamp.fromDate(expiresAt),
+    };
+
+    console.log('💾 Saving learning data:', {
+      mainResponsesCount: learningData.mainResponses.length,
+      threadResponsesCount: learningData.threadResponses.length,
+      dataSizeKB: Math.round(JSON.stringify(learningData).length / 1024),
+      expiresAt: expiresAt.toISOString(),
+      userId: auth.currentUser.uid
+    });
+
+    // TEMPORARY: Use deepdives collection to test if it's a collection-specific issue
+    const docRef = await addDoc(collection(db, 'deepdives'), {
+      type: 'learning_data', // Mark this as learning data
+      ...learningDataDoc
+    });
+    console.log('✅ Learning data saved successfully with ID:', docRef.id);
+    return docRef.id;
+
+  } catch (error) {
+    console.error('❌ Error saving learning data:', error);
+    throw new Error(`Failed to save learning data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
+
+export const getLearningData = async (learningDataId: string) => {
+  console.log('🎓 Loading learning data from Firebase:', learningDataId);
+  
+  if (!auth.currentUser) {
+    console.error('❌ No authenticated user found');
+    throw new Error('User must be authenticated to load learning data');
+  }
+
+  try {
+    // TEMPORARY: Use deepdives collection
+    const docRef = doc(db, 'deepdives', learningDataId);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) {
+      throw new Error('Learning data not found');
+    }
+
+    const data = docSnap.data();
+    
+    // Check if this is actually learning data
+    if (data.type !== 'learning_data') {
+      throw new Error('Document is not learning data');
+    }
+
+    const learningDataDoc = data as LearningDataDoc & { type: string };
+    
+    // Check if user owns this data
+    if (learningDataDoc.userId !== auth.currentUser.uid) {
+      throw new Error('Access denied: You do not own this learning data');
+    }
+
+    // Check if data has expired
+    if (learningDataDoc.expiresAt.toDate() < new Date()) {
+      // Delete expired data
+      await deleteDoc(docRef);
+      throw new Error('Learning data has expired and has been deleted');
+    }
+
+    console.log('✅ Learning data loaded successfully');
+    return learningDataDoc.learningData;
+
+  } catch (error) {
+    console.error('❌ Error loading learning data:', error);
+    throw new Error(`Failed to load learning data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
+
+export const deleteLearningData = async (learningDataId: string) => {
+  console.log('🗑️ Deleting learning data:', learningDataId);
+  
+  if (!auth.currentUser) {
+    console.error('❌ No authenticated user found');
+    throw new Error('User must be authenticated to delete learning data');
+  }
+
+  try {
+    // TEMPORARY: Use deepdives collection
+    await deleteDoc(doc(db, 'deepdives', learningDataId));
+    console.log('✅ Learning data deleted successfully');
+  } catch (error) {
+    console.error('❌ Error deleting learning data:', error);
+    throw new Error(`Failed to delete learning data: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };

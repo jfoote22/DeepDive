@@ -4,7 +4,7 @@ import { useRef, useState, useContext, useEffect } from 'react';
 import ThreadedChat from "../components/ThreadedChat";
 import FirebaseTest from "../components/FirebaseTest";
 import { AuthContext } from '../lib/contexts/AuthContext';
-import { saveDeepDive, getUserDeepDives, updateDeepDive, deleteDeepDive, DeepDiveData } from '../lib/firebase/firebaseUtils';
+import { saveDeepDive, getUserDeepDives, updateDeepDive, deleteDeepDive, DeepDiveData, saveLearningData } from '../lib/firebase/firebaseUtils';
 import Image from 'next/image';
 
 export default function Home() {
@@ -57,6 +57,92 @@ export default function Home() {
   const handleCopyAllResponses = () => {
     if (threadedChatRef.current) {
       threadedChatRef.current.copyAllAIResponses();
+    }
+  };
+
+  const handleGenerateLearningTools = async () => {
+    if (!threadedChatRef.current) {
+      alert('No chat data available. Please start a conversation first.');
+      return;
+    }
+
+    if (!user) {
+      alert('Please sign in to generate learning tools.');
+      return;
+    }
+
+    try {
+      // First, expand all rows to ensure all threads are visible
+      const chatComponent = threadedChatRef.current;
+      
+      // Force update thread messages to get the latest data
+      chatComponent.forceUpdateThreadMessages?.();
+      
+      // Wait a moment for updates to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Get current state from ThreadedChat
+      const chatState = chatComponent.getCurrentState?.();
+      
+      if (!chatState) {
+        throw new Error('Unable to get current chat state');
+      }
+
+      // Validate that there's content to process
+      const hasMainMessages = chatState.mainMessages && chatState.mainMessages.length > 0;
+      const hasThreads = chatState.threads && chatState.threads.length > 0;
+      
+      if (!hasMainMessages && !hasThreads) {
+        alert('⚠️ No conversation data found!\n\nPlease start a conversation with the AI first, then try generating learning tools.');
+        return;
+      }
+
+      // Extract AI responses from main chat
+      const mainResponses = (chatState.mainMessages || [])
+        .filter((msg: any) => msg.role === 'assistant')
+        .map((msg: any, index: number) => ({
+          content: msg.content,
+          index: index + 1
+        }));
+
+      // Extract AI responses from threads
+      const threadResponses: any[] = [];
+      (chatState.threads || []).forEach((thread: any, threadIndex: number) => {
+        const threadAIResponses = (thread.messages || [])
+          .filter((msg: any) => msg.role === 'assistant');
+        
+        threadAIResponses.forEach((msg: any, responseIndex: number) => {
+          threadResponses.push({
+            content: msg.content,
+            threadTitle: thread.title || `Thread ${threadIndex + 1}`,
+            context: thread.selectedContext || '',
+            threadIndex: threadIndex + 1,
+            responseIndex: responseIndex + 1
+          });
+        });
+      });
+
+      // Prepare data for learning tools
+      const learningData = {
+        mainResponses,
+        threadResponses
+      };
+
+      console.log('🎓 Generated learning data:', {
+        mainResponsesCount: mainResponses.length,
+        threadResponsesCount: threadResponses.length,
+        dataSizeKB: Math.round(JSON.stringify(learningData).length / 1024)
+      });
+
+      // Save to Firebase
+      const learningDataId = await saveLearningData(learningData);
+      
+      // Navigate to learning page with Firebase ID
+      window.open(`/learn?id=${learningDataId}`, '_blank');
+
+    } catch (error) {
+      console.error('❌ Failed to generate learning tools:', error);
+      alert(`❌ Failed to generate learning tools.\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease try again.`);
     }
   };
 
@@ -305,6 +391,17 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
                     </svg>
                     Copy All Responses
+                  </button>
+                  
+                  <button
+                    onClick={handleGenerateLearningTools}
+                    className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 border border-purple-500 hover:border-purple-400 flex items-center gap-2"
+                    title="Generate interactive learning tools (flashcards, slides, infographics)"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                    Generate Learning Tools
                   </button>
                 </div>
                 
