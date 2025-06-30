@@ -513,7 +513,7 @@ export default function LearnPage() {
               {selectedModalItem.type === 'thread' && selectedModalItem.context && (
                 <div className="bg-slate-700 rounded-lg p-4 mb-6 border-l-4 border-green-500">
                   <h3 className="text-white font-medium mb-2">📋 Context</h3>
-                  <p className="text-gray-300 text-sm italic">"{selectedModalItem.context}"</p>
+                  <p className="text-gray-300 text-sm italic">&quot;{selectedModalItem.context}&quot;</p>
                 </div>
               )}
               
