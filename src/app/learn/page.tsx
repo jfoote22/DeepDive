@@ -117,9 +117,9 @@ export default function LearnPage() {
       const lines = item.content.split('\n').filter(line => line.trim());
       const firstLine = lines[0] || item.title;
       
-      let question = `What is explained in "${item.title}"?`;
+      let question = `What is explained in &quot;${item.title}&quot;?`;
       if (item.type === 'thread' && item.context) {
-        question = `Based on the context "${item.context.substring(0, 50)}...", what was explained?`;
+        question = `Based on the context &quot;${item.context.substring(0, 50)}...&quot;, what was explained?`;
       }
       
       // Find key points for the answer

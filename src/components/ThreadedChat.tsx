@@ -167,6 +167,31 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Helper function for mobile selection
+  const startMobileSelection = React.useCallback((touch: Touch, messageElement: HTMLElement, messageId: string, isFromThread: boolean, threadId?: string) => {
+    const textContent = messageElement.textContent || '';
+    const rect = messageElement.getBoundingClientRect();
+    const relativeX = touch.clientX - rect.left;
+    const relativeY = touch.clientY - rect.top;
+    
+    // Find approximate text offset based on touch position
+    const charOffset = estimateTextOffset(messageElement, relativeX, relativeY);
+    
+    setMobileSelection({
+      isActive: true,
+      startOffset: charOffset,
+      endOffset: charOffset + 10, // Start with a small selection
+      text: textContent.substring(charOffset, charOffset + 10),
+      messageElement,
+      messageId,
+      isFromThread,
+      threadId
+    });
+    
+    setTouchState(prev => ({ ...prev, isDragging: true }));
+    highlightMobileSelection(messageElement, charOffset, charOffset + 10);
+  }, []);
+
   // Mobile touch handlers
   const handleTouchStart = React.useCallback((e: TouchEvent, messageId: string, isFromThread: boolean, threadId?: string) => {
     const touch = e.touches[0];
@@ -210,31 +235,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         longPressTimer: null
       }));
     }
-  }, [touchState]);
-
-  const startMobileSelection = React.useCallback((touch: Touch, messageElement: HTMLElement, messageId: string, isFromThread: boolean, threadId?: string) => {
-    const textContent = messageElement.textContent || '';
-    const rect = messageElement.getBoundingClientRect();
-    const relativeX = touch.clientX - rect.left;
-    const relativeY = touch.clientY - rect.top;
-    
-    // Find approximate text offset based on touch position
-    const charOffset = estimateTextOffset(messageElement, relativeX, relativeY);
-    
-    setMobileSelection({
-      isActive: true,
-      startOffset: charOffset,
-      endOffset: charOffset + 10, // Start with a small selection
-      text: textContent.substring(charOffset, charOffset + 10),
-      messageElement,
-      messageId,
-      isFromThread,
-      threadId
-    });
-    
-    setTouchState(prev => ({ ...prev, isDragging: true }));
-    highlightMobileSelection(messageElement, charOffset, charOffset + 10);
-  }, []);
+  }, [touchState, startMobileSelection]);
 
   const handleTouchMove = React.useCallback((e: TouchEvent) => {
     if (!mobileSelection.isActive || !touchState.isDragging || !mobileSelection.messageElement) return;
