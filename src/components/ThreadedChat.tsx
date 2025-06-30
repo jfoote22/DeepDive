@@ -96,7 +96,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   // Thread header color toggle state
   const [threadHeaderColorsEnabled, setThreadHeaderColorsEnabled] = useState<boolean>(true);
   // Global context visibility toggle state
-  const [showAllContexts, setShowAllContexts] = useState<boolean>(false);
+  const [showAllContexts, setShowAllContexts] = useState<boolean>(true);
   
   // Mobile selection state
   const [mobileSelection, setMobileSelection] = useState<MobileSelection>({
@@ -627,7 +627,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           setManualMainWidth(state.uiState.manualMainWidth || null);
           setFullscreenThread(state.uiState.fullscreenThread || null);
           setThreadHeaderColorsEnabled(state.uiState.threadHeaderColorsEnabled !== undefined ? state.uiState.threadHeaderColorsEnabled : true);
-          setShowAllContexts(state.uiState.showAllContexts !== undefined ? state.uiState.showAllContexts : false);
+          setShowAllContexts(state.uiState.showAllContexts !== undefined ? state.uiState.showAllContexts : true);
         } else {
           // Fallback to default UI state for older saves
           console.log('🎨 Using default UI state (older save format)');
@@ -637,7 +637,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           setManualMainWidth(null);
           setFullscreenThread(null);
           setThreadHeaderColorsEnabled(true);
-          setShowAllContexts(false);
+          setShowAllContexts(true);
         }
         
         // Clear context menu
@@ -680,7 +680,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     setCollapsedContexts(new Set());
     setManualMainWidth(null);
     setThreadHeaderColorsEnabled(true);
-    setShowAllContexts(false);
+    setShowAllContexts(true);
     
     // Clear context menu
     setShowContextMenu(false);
@@ -1231,7 +1231,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   });
   MessageContent.displayName = 'MessageContent';
 
-  const ThreadPanel = ({ thread }: { thread: Thread }) => {
+  const ThreadPanel = ({ thread, rowThreadCount }: { thread: Thread, rowThreadCount?: number }) => {
     // Get initial messages for this thread if available
     const initialMessages = threadMessagesToLoad[thread.id] || thread.messages || [];
     
@@ -1331,18 +1331,20 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                 #{threads.findIndex(t => t.id === thread.id) + 1}
               </div>
               
-              {/* Action and source info - always visible but condensed when collapsed */}
-              <div className={`flex items-center gap-2 bg-black/20 px-2 py-1 rounded-lg flex-shrink-0 ${isCollapsed ? 'max-w-32' : ''}`}>
-                <span className={`font-semibold text-white ${isCollapsed ? 'text-xs' : 'text-sm'} truncate`}>
-                  {getActionLabel(thread.actionType)}
-                </span>
-                {!isCollapsed && (
-                  <>
-                    <span className="text-white/60 text-xs">•</span>
-                    <span className="text-white/80 text-xs">{getContextSource(thread)}</span>
-                  </>
-                )}
-              </div>
+              {/* Action and source info - hide when 4+ threads in row to save space */}
+              {(!rowThreadCount || rowThreadCount < 4) && (
+                <div className={`flex items-center gap-2 bg-black/20 px-2 py-1 rounded-lg flex-shrink-0 ${isCollapsed ? 'max-w-32' : ''}`}>
+                  <span className={`font-semibold text-white ${isCollapsed ? 'text-xs' : 'text-sm'} truncate`}>
+                    {getActionLabel(thread.actionType)}
+                  </span>
+                  {!isCollapsed && (
+                    <>
+                      <span className="text-white/60 text-xs">•</span>
+                      <span className="text-white/80 text-xs">{getContextSource(thread)}</span>
+                    </>
+                  )}
+                </div>
+              )}
               
               {/* Context dropdown - only show when not collapsed to prioritize control buttons */}
               {thread.selectedContext && !isCollapsed && (
@@ -1773,7 +1775,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
               return hasFullscreenInRow ? fullscreenThread === thread.id : true;
             })
             .map((thread) => (
-              <ThreadPanel key={thread.id} thread={thread} />
+              <ThreadPanel key={thread.id} thread={thread} rowThreadCount={rowThreads.length} />
             ))}
         </div>
       </div>
