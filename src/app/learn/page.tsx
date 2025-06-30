@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 
@@ -17,7 +17,7 @@ interface LearningData {
 
 type ViewMode = 'overview' | 'flashcards' | 'slides' | 'infographic';
 
-export default function LearnPage() {
+function LearnPageContent() {
   const [learningData, setLearningData] = useState<LearningData | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('overview');
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
@@ -641,5 +641,26 @@ export default function LearnPage() {
         {viewMode === 'infographic' && renderInfographic()}
       </main>
     </div>
+  );
+}
+
+// Loading component for Suspense fallback
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
+      <div className="text-center">
+        <div className="text-white text-xl mb-4">Loading learning tools...</div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+      </div>
+    </div>
+  );
+}
+
+// Main export wrapped with Suspense
+export default function LearnPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <LearnPageContent />
+    </Suspense>
   );
 } 
