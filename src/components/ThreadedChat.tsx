@@ -38,6 +38,8 @@ type ModelProvider = 'openai' | 'claude' | 'anthropic' | 'grok';
 
 // Custom hook for thread chat instances - creates isolated chat for each thread
 function useThreadChat(selectedModel: ModelProvider, threadId: string, initialMessages?: Message[]) {
+  const [showReasoning, setShowReasoning] = useState(false);
+
   const getApiEndpoint = (model: ModelProvider) => {
     switch (model) {
       case 'openai':
@@ -49,7 +51,7 @@ function useThreadChat(selectedModel: ModelProvider, threadId: string, initialMe
       case 'grok':
         return '/api/grok/chat';
       default:
-        return '/api/anthropic/chat';
+        return '/api/openai/chat';
     }
   };
 
@@ -61,14 +63,29 @@ function useThreadChat(selectedModel: ModelProvider, threadId: string, initialMe
   })) || [];
 
   // Create a unique chat instance for this specific thread
-  return useChat({
+  const { messages, input, handleInputChange, handleSubmit, isLoading, append, stop } = useChat({
     id: `thread-${threadId}`, // Unique ID ensures complete isolation
     api: getApiEndpoint(selectedModel),
     initialMessages: formattedInitialMessages,
+    body: {
+      showReasoning // Pass reasoning mode to API
+    },
     onError: (error) => {
       console.error(`Thread ${threadId} chat error:`, error);
     },
   });
+
+  return {
+    messages,
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+    append,
+    stop,
+    showReasoning,
+    setShowReasoning
+  };
 }
 
 const ThreadedChat = forwardRef<any, {}>((props, ref) => {
@@ -79,6 +96,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [selectedMessageId, setSelectedMessageId] = useState<string>('');
+  const [mainShowReasoning, setMainShowReasoning] = useState(false);
 
   // Add state for thread expansion
   const [expandedThread, setExpandedThread] = useState<string | 'main' | null>('main');
@@ -152,9 +170,9 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   // Main chat hook
   const mainChat = useChat({
     api: getApiEndpoint(selectedModel),
-    onError: (error) => {
-      console.error('Main chat error:', error);
-    },
+    body: {
+      showReasoning: mainShowReasoning // Add reasoning parameter
+    }
   });
 
   // Detect mobile device
@@ -925,7 +943,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         action: 'ask',
         icon: '💬',
         label: 'Ask about this',
-        onClick: () => createNewThread(selectedText, false, false, 'ask'),
+        onClick: () => createNewThread(selectedText, false, true, 'ask'),
         colorScheme: getActionColorScheme('ask')
       }
     ];
@@ -1019,7 +1037,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     mainChat.setInput('');
   };
 
-  const ChatInput = ({ isThread = false, onSubmit, input, handleInputChange, isLoading, threadChat }: any) => {
+  const ChatInput = ({ isThread = false, onSubmit, input, handleInputChange, isLoading, threadChat, showReasoning, setShowReasoning }: any) => {
     const [localInput, setLocalInput] = useState('');
 
     const handleSubmit = (e: any) => {
@@ -1042,24 +1060,87 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
       setLocalInput('');
     };
 
+    const handleStopGeneration = () => {
+      if (!isThread && mainChat && mainChat.stop) {
+        mainChat.stop();
+      } else if (isThread && threadChat && threadChat.stop) {
+        threadChat.stop();
+      }
+    };
+
+    const handleButtonClick = (e: any) => {
+      if (isLoading) {
+        e.preventDefault();
+        return;
+      }
+    };
+
     return (
-      <form onSubmit={handleSubmit} className="w-full flex gap-2">
-        <input 
-          type="text"
-          value={localInput}
-          onChange={(e) => setLocalInput(e.target.value)}
-          className="flex-1 p-4 bg-white text-black border border-gray-300"
-          placeholder={isThread ? "Ask about the selected context..." : "Type a message"}
-          disabled={isLoading}
-        />
-        <button 
-          type="submit" 
-          className="px-4 bg-blue-500 text-white disabled:bg-gray-400"
-          disabled={isLoading || !localInput.trim()}
-        >
-          {isLoading ? 'Sending...' : 'Send'}
-        </button>
-      </form>
+      <div className="w-full space-y-2">
+        {/* Reasoning Toggle */}
+        {selectedModel === 'grok' && (
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => setShowReasoning(!showReasoning)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all duration-200 ${
+                showReasoning 
+                  ? 'bg-accent-blue/20 text-accent-blue border border-accent-blue/50' 
+                  : 'bg-card/40 text-muted border border-custom hover:bg-card/60'
+              }`}
+              title="Toggle reasoning mode (like grok.com Think Mode)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              <span>{showReasoning ? 'Think Mode: ON' : 'Think Mode: OFF'}</span>
+            </button>
+          </div>
+        )}
+
+        {/* Input Form */}
+        <form onSubmit={handleSubmit} className="w-full flex gap-3">
+          <input 
+            type="text"
+            value={localInput}
+            onChange={(e) => setLocalInput(e.target.value)}
+            className="flex-1 px-4 py-3 bg-white text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue transition-all duration-200"
+            placeholder={isThread ? "Ask about the selected context..." : "Type a message"}
+            disabled={isLoading}
+          />
+          <button 
+            type={isLoading ? "button" : "submit"}
+            onClick={handleButtonClick}
+            className={`w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200 ${
+              isLoading 
+                ? 'bg-accent-orange/20 hover:bg-accent-orange/30 border-accent-orange/50 text-accent-orange' 
+                : localInput.trim() 
+                  ? 'bg-accent-blue/20 hover:bg-accent-blue/30 border-accent-blue/50 text-accent-blue hover:scale-105' 
+                  : 'bg-card/40 border-custom text-muted cursor-not-allowed'
+            } border backdrop-blur-sm`}
+            disabled={isLoading || !localInput.trim()}
+            title={isLoading ? "AI is thinking..." : "Send message"}
+          >
+            {isLoading ? (
+              <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" opacity="0.25"/>
+                <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"/>
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+            )}
+          </button>
+        </form>
+
+        {/* Status indicator */}
+        {selectedModel === 'grok' && showReasoning && (
+          <div className="text-xs text-accent-blue/70 text-center">
+            💭 Reasoning mode enabled - AI will show its thinking process
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -1453,6 +1534,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
             handleInputChange={threadChat.handleInputChange}
             isLoading={threadChat.isLoading}
             threadChat={threadChat}
+            showReasoning={threadChat.showReasoning}
+            setShowReasoning={threadChat.setShowReasoning}
           />
         </div>
       </div>
@@ -1940,6 +2023,9 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                 input={mainChat.input}
                 handleInputChange={mainChat.handleInputChange}
                 isLoading={mainChat.isLoading}
+                threadChat={mainChat}
+                showReasoning={mainShowReasoning}
+                setShowReasoning={setMainShowReasoning}
               />
             </div>
           </div>
@@ -2112,7 +2198,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           className="fixed bg-slate-800 border border-slate-600 rounded-lg shadow-2xl min-w-[300px] max-w-[500px] z-[100000]"
           style={{ 
             left: '50%',
-            top: isMobileDevice ? '25%' : '35%', // Position higher on mobile to avoid keyboard
+            top: isMobileDevice ? '20%' : '30%', // Position higher on mobile to avoid keyboard
             transform: 'translate(-50%, -50%)', // Center both horizontally and vertically
             pointerEvents: 'auto' // Ensure it can be clicked
           }}
@@ -2140,7 +2226,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           className="fixed bg-slate-800 border border-slate-600 rounded-lg shadow-2xl py-2 min-w-[240px] z-[99999]"
           style={{ 
             left: '50%',
-            top: isMobileDevice ? '45%' : '55%', // Position higher on mobile to avoid keyboard
+            top: isMobileDevice ? '50%' : '60%', // Position higher on mobile to avoid keyboard
             transform: 'translate(-50%, -50%)', // Center both horizontally and vertically
             pointerEvents: 'auto' // Ensure it can be clicked
           }}
@@ -2156,7 +2242,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                 action: 'ask',
                 icon: '💬',
                 label: 'Ask about this',
-                onClick: () => createNewThread(selectedText, false, false, 'ask'),
+                onClick: () => createNewThread(selectedText, false, true, 'ask'),
                 colorScheme: getActionColorScheme('ask')
               },
               {
