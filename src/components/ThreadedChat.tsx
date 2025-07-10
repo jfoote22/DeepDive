@@ -34,7 +34,7 @@ interface MobileSelection {
   threadId?: string;
 }
 
-type ModelProvider = 'openai' | 'claude' | 'anthropic';
+type ModelProvider = 'openai' | 'claude' | 'anthropic' | 'grok';
 
 // Custom hook for thread chat instances - creates isolated chat for each thread
 function useThreadChat(selectedModel: ModelProvider, threadId: string, initialMessages?: Message[]) {
@@ -46,6 +46,8 @@ function useThreadChat(selectedModel: ModelProvider, threadId: string, initialMe
         return '/api/anthropic/chat';
       case 'anthropic':
         return '/api/anthropic/chat';
+      case 'grok':
+        return '/api/grok/chat';
       default:
         return '/api/anthropic/chat';
     }
@@ -70,7 +72,7 @@ function useThreadChat(selectedModel: ModelProvider, threadId: string, initialMe
 }
 
 const ThreadedChat = forwardRef<any, {}>((props, ref) => {
-  const [selectedModel, setSelectedModel] = useState<ModelProvider>('anthropic');
+  const [selectedModel, setSelectedModel] = useState<ModelProvider>('grok');
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [selectedText, setSelectedText] = useState<string>('');
@@ -140,6 +142,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         return '/api/anthropic/chat';
       case 'anthropic':
         return '/api/anthropic/chat';
+      case 'grok':
+        return '/api/grok/chat';
       default:
         return '/api/anthropic/chat';
     }
@@ -979,7 +983,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
       {[
         { value: 'openai' as ModelProvider, label: 'GPT-4', emoji: '🧠', color: 'green' },
         { value: 'claude' as ModelProvider, label: 'Claude 4 Opus', emoji: '🤖', color: 'blue' },
-        { value: 'anthropic' as ModelProvider, label: 'Claude 3.5 Sonnet', emoji: '🎯', color: 'purple' }
+        { value: 'anthropic' as ModelProvider, label: 'Claude 3.5 Sonnet', emoji: '🎯', color: 'purple' },
+        { value: 'grok' as ModelProvider, label: 'Grok4', emoji: '⚡', color: 'orange' }
       ].map((model) => (
         <button
           key={model.value}
@@ -990,7 +995,9 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                 ? 'bg-accent-green/20 text-accent-green border-accent-green/50 shadow-lg' 
                 : model.color === 'blue'
                 ? 'bg-accent-blue/20 text-accent-blue border-accent-blue/50 shadow-lg'
-                : 'bg-accent-purple/20 text-accent-purple border-accent-purple/50 shadow-lg'
+                : model.color === 'purple'
+                ? 'bg-accent-purple/20 text-accent-purple border-accent-purple/50 shadow-lg'
+                : 'bg-accent-orange/20 text-accent-orange border-accent-orange/50 shadow-lg'
               : 'bg-card/60 text-muted hover:bg-hover hover:text-white border-custom'
           }`}
         >
