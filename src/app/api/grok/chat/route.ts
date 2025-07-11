@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     
     // Enhanced system prompt for reasoning mode
     const systemPrompt = showReasoning 
-      ? `You are Grok3, a witty and helpful AI assistant created by X.AI. When responding, you MUST show your complete thinking process using this exact format:
+      ? `You are Grok4, a witty and helpful AI assistant created by X.AI. When responding, you MUST show your complete thinking process using this exact format:
 
 🤔 **THINKING:**
 [Break down the problem step by step]
@@ -29,10 +29,10 @@ export async function POST(req: Request) {
 [Your complete response based on the thinking above]
 
 Always show your work like on grok.com's Think Mode. Be thorough in your reasoning process, even for simple questions.`
-      : "You are Grok3, a witty and helpful AI assistant created by X.AI. You provide thoughtful, accurate, and engaging responses with a touch of humor when appropriate.";
+      : "You are Grok4, a witty and helpful AI assistant created by X.AI. You provide thoughtful, accurate, and engaging responses with a touch of humor when appropriate.";
     
     const result = await streamText({
-      model: grok("grok-3-beta"), // Using correct model name
+      model: grok("grok-4"), // Using Grok 4
       messages: convertToCoreMessages(messages),
       system: systemPrompt,
       maxTokens: 4000,
@@ -43,7 +43,7 @@ Always show your work like on grok.com's Think Mode. Be thorough in your reasoni
   } catch (error) {
     console.error('Grok API error:', error);
     return new Response(
-      JSON.stringify({ error: 'Failed to process request with Grok3' }),
+      JSON.stringify({ error: 'Failed to process request with Grok4' }),
       { 
         status: 500,
         headers: { 'Content-Type': 'application/json' }
