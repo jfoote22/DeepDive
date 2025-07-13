@@ -37,7 +37,7 @@ interface MobileSelection {
 type ModelProvider = 'openai' | 'claude' | 'anthropic' | 'grok';
 
 // Custom hook for thread chat instances - creates isolated chat for each thread
-function useThreadChat(selectedModel: ModelProvider, threadId: string, initialMessages?: Message[]) {
+function useThreadChat(selectedModel: ModelProvider, threadId: string, initialMessages?: Message[], grokMode: string = 'normal') {
   const [showReasoning, setShowReasoning] = useState(false);
 
   const getApiEndpoint = (model: ModelProvider) => {
@@ -68,7 +68,8 @@ function useThreadChat(selectedModel: ModelProvider, threadId: string, initialMe
     api: getApiEndpoint(selectedModel),
     initialMessages: formattedInitialMessages,
     body: {
-      showReasoning // Pass reasoning mode to API
+      showReasoning,
+      ...(selectedModel === 'grok' && { mode: grokMode }),
     },
     onError: (error) => {
       console.error(`Thread ${threadId} chat error:`, error);
@@ -97,6 +98,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [selectedMessageId, setSelectedMessageId] = useState<string>('');
   const [mainShowReasoning, setMainShowReasoning] = useState(false);
+
+  const [grokMode, setGrokMode] = useState<'normal' | 'fun' | 'creative' | 'precise'>('normal');
 
   // Add state for thread expansion
   const [expandedThread, setExpandedThread] = useState<string | 'main' | null>('main');
@@ -171,7 +174,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   const mainChat = useChat({
     api: getApiEndpoint(selectedModel),
     body: {
-      showReasoning: mainShowReasoning // Add reasoning parameter
+      showReasoning: mainShowReasoning,
+      ...(selectedModel === 'grok' && { mode: grokMode }),
     }
   });
 
@@ -1325,7 +1329,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     const initialMessages = threadMessagesToLoad[thread.id] || thread.messages || [];
     
     // Create a dedicated, isolated chat instance for this specific thread with initial messages
-    const threadChat = useThreadChat(selectedModel, thread.id, initialMessages);
+    const threadChat = useThreadChat(selectedModel, thread.id, initialMessages, grokMode);
     
     // Store the thread chat instance reference for accessing messages during save
     React.useEffect(() => {
@@ -1974,6 +1978,31 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
               </div>
               
               <ModelSelector />
+              {selectedModel === 'grok' && (
+                <details className="mt-4 bg-card/40 p-3 rounded-lg border border-custom">
+                  <summary className="cursor-pointer text-white font-medium flex items-center gap-2">
+                    <span>Grok Response Settings</span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </summary>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {['normal', 'fun', 'creative', 'precise'].map(mode => (
+                      <button
+                        key={mode}
+                        onClick={() => setGrokMode(mode as 'normal' | 'fun' | 'creative' | 'precise')}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 border ${
+                          grokMode === mode
+                            ? 'bg-accent-blue/20 text-accent-blue border-accent-blue/50'
+                            : 'bg-card/60 text-muted hover:bg-hover hover:text-white border-custom'
+                        }`}
+                      >
+                        {mode.charAt(0).toUpperCase() + mode.slice(1)} Mode
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              )}
               {hasActiveThreads && (
                 <div className="mt-2 text-sm text-muted">
                   💡 Select text in any AI response to create contextual threads - drill deeper into topics!

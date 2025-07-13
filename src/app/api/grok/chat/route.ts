@@ -5,7 +5,7 @@ export const runtime = "edge";
 
 export async function POST(req: Request) {
   try {
-    const { messages, showReasoning = false } = await req.json();
+    const { messages, showReasoning = false, mode = 'normal' } = await req.json();
     
     // Create a custom OpenAI-compatible client for X.AI's API
     const grok = createOpenAI({
@@ -13,9 +13,11 @@ export async function POST(req: Request) {
       apiKey: process.env.XAI_API_KEY || "", // Make sure to add this to your .env.local
     });
     
-    // Enhanced system prompt for reasoning mode
-    const systemPrompt = showReasoning 
-      ? `You are Grok4, a witty and helpful AI assistant created by X.AI. When responding, you MUST show your complete thinking process using this exact format:
+    // Enhanced system prompt for reasoning mode and custom modes
+    let systemPrompt = '';
+    
+    if (showReasoning) {
+      systemPrompt = `You are Grok4, a witty and helpful AI assistant created by X.AI. When responding, you MUST show your complete thinking process using this exact format:
 
 🤔 **THINKING:**
 [Break down the problem step by step]
@@ -28,11 +30,27 @@ export async function POST(req: Request) {
 💡 **ANSWER:**
 [Your complete response based on the thinking above]
 
-Always show your work like on grok.com's Think Mode. Be thorough in your reasoning process, even for simple questions.`
-      : "You are Grok4, a witty and helpful AI assistant created by X.AI. You provide thoughtful, accurate, and engaging responses with a touch of humor when appropriate.";
+Always show your work like on grok.com's Think Mode. Be thorough in your reasoning process, even for simple questions.`;
+    } else {
+      switch (mode) {
+        case 'fun':
+          systemPrompt = 'You are Grok4, a maximally truth-seeking AI with a witty, humorous personality inspired by the Hitchhiker\'s Guide to the Galaxy. Respond with clever jokes, sarcasm, and fun insights while being helpful.';
+          break;
+        case 'creative':
+          systemPrompt = 'You are Grok4, a creative and imaginative AI. Provide innovative, out-of-the-box ideas and responses while maintaining accuracy and helpfulness.';
+          break;
+        case 'precise':
+          systemPrompt = 'You are Grok4, a precise and factual AI. Provide concise, accurate information without unnecessary elaboration or humor.';
+          break;
+        case 'normal':
+        default:
+          systemPrompt = 'You are Grok4, a witty and helpful AI assistant created by X.AI. You provide thoughtful, accurate, and engaging responses with a touch of humor when appropriate.';
+          break;
+      }
+    }
     
     const result = await streamText({
-      model: grok("grok-4"), // Using Grok 4
+      model: grok('grok-4'),
       messages: convertToCoreMessages(messages),
       system: systemPrompt,
       maxTokens: 4000,
