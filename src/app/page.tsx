@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useContext, useEffect } from 'react';
+import { useRef, useState, useContext, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ThreadedChat from "../components/ThreadedChat";
 import FirebaseTest from "../components/FirebaseTest";
@@ -8,10 +8,42 @@ import { AuthContext } from '../lib/contexts/AuthContext';
 import { saveDeepDive, getUserDeepDives, updateDeepDive, deleteDeepDive, DeepDiveData, saveLearningData } from '../lib/firebase/firebaseUtils';
 import Image from 'next/image';
 
-export default function Home() {
+// Component to handle search params logic
+function SearchParamsHandler({ 
+  user, 
+  savedDeepDives, 
+  handleLoadDeepDive 
+}: { 
+  user: any; 
+  savedDeepDives: DeepDiveData[]; 
+  handleLoadDeepDive: (deepDive: DeepDiveData) => void; 
+}) {
+  const searchParams = useSearchParams();
+
+  // Auto-load DeepDive if load parameter is present (for navigation back from learning tools)
+  useEffect(() => {
+    const loadParam = searchParams.get('load');
+    if (loadParam && user && savedDeepDives.length > 0) {
+      console.log('🔄 Auto-loading DeepDive from URL parameter:', loadParam);
+      const deepDiveToLoad = savedDeepDives.find(dd => dd.id === loadParam);
+      if (deepDiveToLoad) {
+        handleLoadDeepDive(deepDiveToLoad);
+        // Clean up the URL parameter after loading
+        const url = new URL(window.location.href);
+        url.searchParams.delete('load');
+        window.history.replaceState({}, '', url.toString());
+      } else {
+        console.warn('DeepDive not found for auto-loading:', loadParam);
+      }
+    }
+  }, [searchParams, user, savedDeepDives, handleLoadDeepDive]);
+
+  return null; // This component doesn't render anything
+}
+
+function HomeContent() {
   const threadedChatRef = useRef<any>(null);
   const { user, loading, signInWithGoogle, signOut } = useContext(AuthContext);
-  const searchParams = useSearchParams();
   const [savedDeepDives, setSavedDeepDives] = useState<DeepDiveData[]>([]);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showLoadDialog, setShowLoadDialog] = useState(false);
@@ -31,24 +63,6 @@ export default function Home() {
       setCurrentDeepDiveId(null);
     }
   }, [user]);
-
-  // Auto-load DeepDive if load parameter is present (for navigation back from learning tools)
-  useEffect(() => {
-    const loadParam = searchParams.get('load');
-    if (loadParam && user && savedDeepDives.length > 0) {
-      console.log('🔄 Auto-loading DeepDive from URL parameter:', loadParam);
-      const deepDiveToLoad = savedDeepDives.find(dd => dd.id === loadParam);
-      if (deepDiveToLoad) {
-        handleLoadDeepDive(deepDiveToLoad);
-        // Clean up the URL parameter after loading
-        const url = new URL(window.location.href);
-        url.searchParams.delete('load');
-        window.history.replaceState({}, '', url.toString());
-      } else {
-        console.warn('DeepDive not found for auto-loading:', loadParam);
-      }
-    }
-  }, [searchParams, user, savedDeepDives]);
 
   const loadUserDeepDives = async () => {
     try {
@@ -470,6 +484,15 @@ export default function Home() {
 
   return (
     <>
+      {/* Search params handler wrapped in Suspense */}
+      <Suspense fallback={null}>
+        <SearchParamsHandler 
+          user={user} 
+          savedDeepDives={savedDeepDives} 
+          handleLoadDeepDive={handleLoadDeepDive} 
+        />
+      </Suspense>
+
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800">
         {/* Thin Header */}
         <header className="w-full bg-slate-900/80 backdrop-blur-sm border-b border-slate-700/50 px-6 py-3 flex items-center justify-between">
@@ -727,4 +750,8 @@ export default function Home() {
       )}
     </>
   );
+}
+
+export default function Home() {
+  return <HomeContent />;
 }
