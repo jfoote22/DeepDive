@@ -19,7 +19,7 @@ export interface Thread {
   title?: string;
   rowId?: number; // Track which row this thread belongs to
   sourceType?: 'main' | 'thread'; // Track if created from main chat or another thread
-  actionType?: 'ask' | 'details' | 'simplify' | 'examples' | 'links' | 'videos'; // Track which context action was used
+  actionType?: 'ask' | 'details' | 'simplify' | 'examples' | 'learning' | 'links' | 'videos'; // Track which context action was used
 }
 
 // Mobile selection state interface
@@ -122,6 +122,15 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   const [showAllContexts, setShowAllContexts] = useState<boolean>(true);
   // Split screen mode state
   const [isSplitScreenMode, setIsSplitScreenMode] = useState<boolean>(false);
+  
+  // Learning snippets state
+  const [learningSnippets, setLearningSnippets] = useState<Array<{
+    id: string;
+    text: string;
+    timestamp: number;
+    source: string;
+  }>>([]);
+  const [showLearningModal, setShowLearningModal] = useState<boolean>(false);
   
   // Mobile selection state
   const [mobileSelection, setMobileSelection] = useState<MobileSelection>({
@@ -685,38 +694,52 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
 
   // Function to clear all threads and main chat for a fresh start
   const clearAllAndStartFresh = () => {
-    // Clear all threads
     setThreads([]);
-    
-    // Clear active thread
     setActiveThreadId(null);
-    
-    // Clear main chat messages
-    mainChat.setMessages([]);
-    
-    // Clear any stored thread chat instances
-    setThreadChatInstances({});
-    
-    // Clear thread messages to load
-    setThreadMessagesToLoad({});
-    
-    // Clear thread chat references
-    threadChatRefs.current = {};
-    
-    // Reset UI state
     setExpandedThread('main');
     setCollapsedRows(new Set());
     setCollapsedContexts(new Set());
+    setFullscreenThread(null);
     setManualMainWidth(null);
-    setThreadHeaderColorsEnabled(true);
-    setShowAllContexts(true);
-    
-    // Clear context menu
-    setShowContextMenu(false);
     setSelectedText('');
+    setShowContextMenu(false);
     setSelectedMessageId('');
+    setContextMenuSource({ messageId: '', isFromThread: false });
+    // Clear main chat messages
+    mainChat.setMessages([]);
+    // Clear thread chat instances
+    setThreadChatInstances({});
+    setThreadMessagesToLoad({});
+    // Force a re-render by updating the key
+    window.location.reload();
+  };
+
+  // Function to add snippets to learning collection
+  const addToLearningSnippets = (text: string) => {
+    const newSnippet = {
+      id: Date.now().toString(),
+      text: text.trim(),
+      timestamp: Date.now(),
+      source: contextMenuSource.isFromThread 
+        ? `Thread ${threads.findIndex(t => t.id === contextMenuSource.threadId) + 1}` 
+        : 'Main Chat'
+    };
     
-    console.log('🧹 Cleared all threads and main chat - fresh start!');
+    setLearningSnippets(prev => [newSnippet, ...prev]);
+    setShowContextMenu(false);
+    
+    // Show brief confirmation
+    // You could add a toast notification here if desired
+  };
+
+  // Function to remove snippet from learning collection
+  const removeLearningSnippet = (id: string) => {
+    setLearningSnippets(prev => prev.filter(snippet => snippet.id !== id));
+  };
+
+  // Function to clear all learning snippets
+  const clearLearningSnippets = () => {
+    setLearningSnippets([]);
   };
 
   // Expose functions to parent component
@@ -756,7 +779,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     console.log('Context menu should be showing'); // Debug log
   }, []);
 
-  const createNewThread = (context: string, autoExpand: boolean = false, autoSend: boolean = false, actionType: 'ask' | 'details' | 'simplify' | 'examples' | 'links' | 'videos' = 'ask') => {
+  const createNewThread = (context: string, autoExpand: boolean = false, autoSend: boolean = false, actionType: 'ask' | 'details' | 'simplify' | 'examples' | 'learning' | 'links' | 'videos' = 'ask') => {
     // Auto-exit fullscreen mode when creating new thread to ensure proper functionality
     const wasInFullscreen = !!fullscreenThread;
     if (fullscreenThread) {
@@ -1180,6 +1203,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         return 'Simplify this';
       case 'examples':
         return 'Give examples';
+      case 'learning':
+        return 'Add to learning';
       case 'links':
         return 'Get links';
       case 'videos':
@@ -1208,66 +1233,67 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     switch (actionType) {
       case 'ask':
         return {
-          bg: 'bg-cyan-500',
-          border: 'border-cyan-500',
-          text: 'text-white',
-          badgeBg: 'bg-cyan-500',
+          bg: 'bg-accent-blue',
+          border: 'border-accent-blue',
           badgeText: 'text-white',
-          badgeBorder: 'border-cyan-500'
+          badgeBg: 'bg-accent-blue',
+          badgeBorder: 'border-accent-blue'
         };
       case 'details':
         return {
           bg: 'bg-accent-green',
           border: 'border-accent-green',
-          text: 'text-white',
-          badgeBg: 'bg-accent-green',
           badgeText: 'text-white',
+          badgeBg: 'bg-accent-green',
           badgeBorder: 'border-accent-green'
         };
       case 'simplify':
         return {
-          bg: 'bg-accent-orange',
-          border: 'border-accent-orange',
-          text: 'text-white',
-          badgeBg: 'bg-accent-orange',
-          badgeText: 'text-white',
-          badgeBorder: 'border-accent-orange'
+          bg: 'bg-accent-yellow',
+          border: 'border-accent-yellow',
+          badgeText: 'text-black',
+          badgeBg: 'bg-accent-yellow',
+          badgeBorder: 'border-accent-yellow'
         };
       case 'examples':
         return {
-          bg: 'bg-accent-purple',
-          border: 'border-accent-purple',
-          text: 'text-white',
-          badgeBg: 'bg-accent-purple',
+          bg: 'bg-accent-orange',
+          border: 'border-accent-orange',
           badgeText: 'text-white',
-          badgeBorder: 'border-accent-purple'
+          badgeBg: 'bg-accent-orange',
+          badgeBorder: 'border-accent-orange'
+        };
+      case 'learning':
+        return {
+          bg: 'bg-violet-500',
+          border: 'border-violet-500',
+          badgeText: 'text-white',
+          badgeBg: 'bg-violet-500',
+          badgeBorder: 'border-violet-500'
         };
       case 'links':
         return {
-          bg: 'bg-accent-blue',
-          border: 'border-accent-blue',
-          text: 'text-white',
-          badgeBg: 'bg-accent-blue',
+          bg: 'bg-accent-red',
+          border: 'border-accent-red',
           badgeText: 'text-white',
-          badgeBorder: 'border-accent-blue'
+          badgeBg: 'bg-accent-red',
+          badgeBorder: 'border-accent-red'
         };
       case 'videos':
         return {
-          bg: 'bg-accent-yellow',
-          border: 'border-accent-yellow',
-          text: 'text-white',
-          badgeBg: 'bg-accent-yellow',
-          badgeText: 'text-black',
-          badgeBorder: 'border-accent-yellow'
+          bg: 'bg-accent-purple',
+          border: 'border-accent-purple',
+          badgeText: 'text-white',
+          badgeBg: 'bg-accent-purple',
+          badgeBorder: 'border-accent-purple'
         };
       default:
         return {
-          bg: 'bg-muted',
-          border: 'border-custom',
-          text: 'text-white',
-          badgeBg: 'bg-muted',
+          bg: 'bg-slate-600',
+          border: 'border-slate-600',
           badgeText: 'text-white',
-          badgeBorder: 'border-custom'
+          badgeBg: 'bg-slate-600',
+          badgeBorder: 'border-slate-600'
         };
     }
   };
@@ -2129,17 +2155,20 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                         }`}></div>
                       </div>
                     </button>
-                    
-                    {collapsedRows.size > 0 && (
-                      <span className="text-sm text-muted bg-card/50 px-2 py-1 rounded-lg">
-                        {collapsedRows.size} row{collapsedRows.size !== 1 ? 's' : ''} collapsed
-                      </span>
-                    )}
-                    {threads.length > 0 && (
-                      <span className="text-sm text-muted bg-card/50 px-2 py-1 rounded-lg">
-                        {threads.length} thread{threads.length !== 1 ? 's' : ''}
-                      </span>
-                    )}
+
+                    {/* Learning Snippets Toggle */}
+                    <button
+                      onClick={() => setShowLearningModal(!showLearningModal)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-200 ${
+                        learningSnippets.length > 0
+                          ? 'bg-violet-500/20 text-violet-400 border-violet-500/50 hover:bg-violet-500/30' 
+                          : 'bg-card/60 text-muted border-custom hover:bg-hover hover:text-white'
+                      }`}
+                      title={`Learning snippets (${learningSnippets.length})`}
+                    >
+                      <span className="text-xs font-medium">🧠</span>
+                      <span className="text-xs font-medium">{learningSnippets.length}</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2310,6 +2339,13 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                 colorScheme: getActionColorScheme('examples')
               },
               {
+                action: 'learning',
+                icon: '🧠',
+                label: 'Include with learning tools',
+                onClick: () => addToLearningSnippets(selectedText),
+                colorScheme: getActionColorScheme('learning')
+              },
+              {
                 action: 'links',
                 icon: '🔗',
                 label: 'Get links',
@@ -2347,6 +2383,112 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
             >
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+      
+      {/* Learning Snippets Modal */}
+      {showLearningModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100001]" onClick={() => setShowLearningModal(false)}>
+          <div 
+            className="bg-slate-800 border border-slate-600 rounded-xl shadow-2xl max-w-4xl max-h-[80vh] w-full mx-4 flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-slate-600">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-violet-500 rounded-full flex items-center justify-center">
+                  🧠
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-white">Learning Snippets</h2>
+                  <p className="text-sm text-gray-400">
+                    {learningSnippets.length} snippet{learningSnippets.length !== 1 ? 's' : ''} collected for enhanced learning tool generation
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {learningSnippets.length > 0 && (
+                  <button
+                    onClick={clearLearningSnippets}
+                    className="px-3 py-1.5 text-sm bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg transition-colors"
+                  >
+                    Clear All
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowLearningModal(false)}
+                  className="text-gray-400 hover:text-white text-2xl transition-colors p-1"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {learningSnippets.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4">🧠</div>
+                  <h3 className="text-xl font-semibold text-white mb-2">No Learning Snippets Yet</h3>
+                  <p className="text-gray-400 mb-4">
+                    Select text in AI responses and choose &quot;Include with learning tools&quot; to build your learning collection.
+                  </p>
+                  <div className="text-sm text-violet-400 bg-violet-500/10 p-4 rounded-lg border border-violet-500/20 max-w-md mx-auto">
+                    <strong>💡 Pro tip:</strong> These snippets will be automatically included when generating learning tools to provide more comprehensive and personalized results.
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {learningSnippets.map((snippet, index) => (
+                    <div
+                      key={snippet.id}
+                      className="bg-slate-700/50 border border-slate-600 rounded-lg p-4 hover:bg-slate-700/70 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xs font-medium text-violet-400 bg-violet-500/20 px-2 py-1 rounded">
+                              #{index + 1}
+                            </span>
+                            <span className="text-xs text-gray-400">{snippet.source}</span>
+                            <span className="text-xs text-gray-500">
+                              {new Date(snippet.timestamp).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="text-sm text-white leading-relaxed">
+                            &quot;{snippet.text}&quot;
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => removeLearningSnippet(snippet.id)}
+                          className="text-gray-400 hover:text-red-400 transition-colors p-1 flex-shrink-0"
+                          title="Remove snippet"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            {learningSnippets.length > 0 && (
+              <div className="border-t border-slate-600 p-6">
+                <div className="text-center">
+                  <div className="text-sm text-gray-400 mb-2">
+                    These snippets will be automatically included in your next learning tool generation
+                  </div>
+                  <div className="text-xs text-violet-400">
+                    Navigate to <strong>/learn</strong> and generate learning tools to see these snippets in action
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
