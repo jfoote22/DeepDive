@@ -1,7 +1,11 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
 
-export const runtime = "edge";
+// Removed: export const runtime = "edge"; 
+// Using Node.js runtime for longer execution times and higher memory limits on Vercel
+
+// Configure maximum duration for Node.js runtime (5 minutes)
+export const maxDuration = 300;
 
 // Type definitions for the analysis result
 interface AnalysisResult {
@@ -167,7 +171,7 @@ IMPORTANT:
 
     console.log('🚀 Starting Grok 4 API call...');
     
-    // Use only Grok 4 - increased timeout to 60 seconds
+    // Use only Grok 4 - increased timeout to 4 minutes for Node.js runtime
     let result;
     try {
       result = await withTimeout(
@@ -177,7 +181,7 @@ IMPORTANT:
           maxTokens: 3000, // Reduced tokens for faster processing
           temperature: 0.3,
         }),
-        60000 // Increased to 60 second timeout
+        240000 // Increased to 4 minute timeout for Node.js runtime
       );
       
       console.log('✅ Grok 4 API call completed successfully');
@@ -195,7 +199,7 @@ IMPORTANT:
         
         // Special handling for timeout errors
         if (apiError.message.includes('timed out')) {
-          throw new Error('Grok 4 API is taking too long to respond. Try with smaller content or try again later.');
+          throw new Error('Grok 4 API is taking longer than expected. The content may be too complex. Try with smaller content or try again later.');
         }
       }
       
