@@ -65,7 +65,7 @@ function LearnPageContent() {
   const [currentAICardIndex, setCurrentAICardIndex] = useState(0);
   const [showAIAnswer, setShowAIAnswer] = useState(false);
   const [currentQuizIndex, setCurrentQuizIndex] = useState(0);
-  const [userAnswers, setUserAnswers] = useState<{ [key: number]: string }>({});
+  const [userAnswers, setUserAnswers] = useState<{ [key: number]: number }>({});
   const [showResults, setShowResults] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState<string>('');
   
@@ -377,18 +377,8 @@ function LearnPageContent() {
 
           <div className="bg-slate-700 rounded-lg p-8 mb-6 min-h-[300px] flex flex-col justify-center">
             <div className="text-center">
-              <div className="text-lg font-semibold text-white mb-4">
+              <div className="text-lg font-semibold text-white mb-6">
                 {card.front}
-              </div>
-              
-              <div className="mb-4">
-                <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                  card.back === 'beginner' ? 'bg-green-600/20 text-green-400' :
-                  card.back === 'intermediate' ? 'bg-yellow-600/20 text-yellow-400' :
-                  'bg-red-600/20 text-red-400'
-                }`}>
-                  {card.back}
-                </span>
               </div>
 
               {showAIAnswer && (
@@ -449,8 +439,10 @@ function LearnPageContent() {
     const isLastQuestion = currentQuizIndex === analysis.quizQuestions.length - 1;
 
     const handleAnswerSubmit = () => {
-      if (selectedAnswer) {
-        setUserAnswers(prev => ({ ...prev, [currentQuizIndex]: selectedAnswer }));
+      if (selectedAnswer !== '') {
+        // Store the selected answer index instead of the text
+        const selectedIndex = analysis.quizQuestions[currentQuizIndex].options.indexOf(selectedAnswer);
+        setUserAnswers(prev => ({ ...prev, [currentQuizIndex]: selectedIndex }));
         
         if (isLastQuestion) {
           setShowResults(true);
@@ -464,7 +456,7 @@ function LearnPageContent() {
     const calculateScore = () => {
       let correct = 0;
       analysis.quizQuestions.forEach((question, index) => {
-        if (userAnswers[index] === question.correctAnswer.toString()) {
+        if (userAnswers[index] === question.correctAnswer) {
           correct++;
         }
       });
@@ -480,7 +472,7 @@ function LearnPageContent() {
             <h2 className="text-3xl font-bold text-white mb-4">Quiz Complete!</h2>
             <div className="text-5xl font-bold text-green-400 mb-4">{score}%</div>
             <p className="text-gray-400 mb-8">
-              You scored {Object.values(userAnswers).filter((answer, index) => answer === analysis.quizQuestions[index].correctAnswer.toString()).length} out of {analysis.quizQuestions.length} questions correctly
+              You scored {Object.values(userAnswers).filter((answer, index) => answer === analysis.quizQuestions[index].correctAnswer).length} out of {analysis.quizQuestions.length} questions correctly
             </p>
             
             <button
