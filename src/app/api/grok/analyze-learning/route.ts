@@ -61,23 +61,24 @@ export async function POST(req: Request) {
       throw new Error(`Failed to create API client: ${clientError instanceof Error ? clientError.message : 'Unknown error'}`);
     }
     
-    // Prepare content with size limits
-    const mainContent = (learningData.mainResponses || [])
-      .map((response: any, index: number) => 
-        `=== MAIN RESPONSE ${index + 1} ===\n${response.content.substring(0, 2000)}\n`
-      ).join('\n');
+    // Prepare content for analysis with smaller size limit
+    const mainContent = learningData.mainResponses?.map((response: any) => response.content).join('\n\n') || '';
+    const threadContent = learningData.threadResponses?.map((response: any) => response.content).join('\n\n') || '';
     
-    const threadContent = (learningData.threadResponses || [])
-      .map((response: any, index: number) => 
-        `=== THREAD: ${response.threadTitle} (Context: ${response.context}) ===\n${response.content.substring(0, 2000)}\n`
-      ).join('\n');
+    // Reduce content size to prevent timeouts - limit to 6000 characters total
+    const maxContentLength = 6000;
+    let fullContent = (mainContent + '\n\n' + threadContent).substring(0, maxContentLength);
     
-    const fullContent = `${mainContent}\n${threadContent}`.substring(0, 8000); // Limit total content
-    
+    // If content was truncated, add a note
+    if ((mainContent + '\n\n' + threadContent).length > maxContentLength) {
+      fullContent += '\n\n[Content truncated for processing...]';
+    }
+
     console.log('📝 Content prepared:', {
       mainContentLength: mainContent.length,
       threadContentLength: threadContent.length,
       totalContentLength: fullContent.length,
+      wasTruncated: (mainContent + '\n\n' + threadContent).length > maxContentLength,
       timestamp: new Date().toISOString()
     });
     
@@ -141,17 +142,17 @@ Analyze the following DeepDive session content and generate comprehensive learni
 
     console.log('🚀 Starting Grok 4 API call...');
     
-    // Use only Grok 4 - no fallback models
+    // Use only Grok 4 - increased timeout to 60 seconds
     let result;
     try {
       result = await withTimeout(
         generateText({
           model: grok('grok-4'),
           prompt: `${systemPrompt}\n\n${fullContent}`,
-          maxTokens: 4000,
+          maxTokens: 3000, // Reduced tokens for faster processing
           temperature: 0.3,
         }),
-        30000 // 30 second timeout for edge functions
+        60000 // Increased to 60 second timeout
       );
       
       console.log('✅ Grok 4 API call completed successfully');
@@ -166,6 +167,11 @@ Analyze the following DeepDive session content and generate comprehensive learni
           stack: apiError.stack?.substring(0, 500),
           name: apiError.name
         });
+        
+        // Special handling for timeout errors
+        if (apiError.message.includes('timed out')) {
+          throw new Error('Grok 4 API is taking too long to respond. Try with smaller content or try again later.');
+        }
       }
       
       throw new Error(`Grok 4 API failed: ${apiError instanceof Error ? apiError.message : 'Unknown error'}`);
