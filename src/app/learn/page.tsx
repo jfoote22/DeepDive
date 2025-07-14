@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
+import { User } from 'firebase/auth';
 
 interface LearningData {
   mainResponses: Array<{ content: string; index: number; }>;
@@ -80,6 +81,10 @@ function LearnPageContent() {
   const [showResults, setShowResults] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState<string>('');
   
+  // Authentication state
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+  
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -127,7 +132,47 @@ function LearnPageContent() {
     }
   }, [viewMode]);
 
+  // Monitor authentication state
   useEffect(() => {
+    const monitorAuth = async () => {
+      try {
+        const { auth } = await import('../../lib/firebase/firebase');
+        
+        if (!auth) {
+          console.warn('Firebase auth not configured');
+          setAuthLoading(false);
+          return;
+        }
+
+        const unsubscribe = auth.onAuthStateChanged((user: User | null) => {
+          console.log('🔐 Auth state changed:', user ? 'User authenticated' : 'No user');
+          setAuthLoading(false);
+          
+          if (!user) {
+            setAuthError('Authentication required to load learning data');
+          } else {
+            setAuthError(null);
+          }
+        });
+
+        return () => unsubscribe();
+      } catch (error) {
+        console.error('Failed to monitor auth state:', error);
+        setAuthLoading(false);
+      }
+    };
+
+    monitorAuth();
+  }, []);
+
+  // Load learning data after authentication is ready
+  useEffect(() => {
+    // Wait for auth to be ready
+    if (authLoading) {
+      console.log('⏳ Waiting for authentication to load...');
+      return;
+    }
+
     const dataParam = searchParams.get('data');
     const idParam = searchParams.get('id');
     
@@ -137,26 +182,29 @@ function LearnPageContent() {
         const decoded = decodeURIComponent(dataParam);
         const parsed = JSON.parse(decoded);
         setLearningData(parsed);
+        console.log('✅ Learning data loaded from URL parameter');
       } catch (error) {
         console.error('Failed to parse learning data from URL:', error);
+        setAuthError('Failed to parse learning data from URL');
       }
     } else if (idParam) {
-      // Simplified Firebase method - handle auth errors gracefully
+      // Firebase method - now with proper auth state
       const loadFromFirebase = async () => {
         try {
+          console.log('🔄 Loading learning data from Firebase...');
           const { getLearningData } = await import('../../lib/firebase/firebaseUtils');
           const data = await getLearningData(idParam);
           setLearningData(data);
+          console.log('✅ Learning data loaded from Firebase successfully');
         } catch (error) {
-          console.error('Failed to load learning data:', error);
-          // Don't show alerts or redirect - just log and let UI show "no data" state
-          console.warn('Learning data could not be loaded, user will see fallback UI');
+          console.error('Failed to load learning data from Firebase:', error);
+          setAuthError(`Failed to load learning data: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       };
       
       loadFromFirebase();
     }
-  }, [searchParams]);
+  }, [searchParams, authLoading]); // Depend on authLoading to wait for auth
 
   // Handle keyboard events for modal
   useEffect(() => {
@@ -181,12 +229,54 @@ function LearnPageContent() {
   const normalizedData = getNormalizedLearningData(learningData);
   const { analysis, metadata } = getEnhancedFeatures(learningData);
 
+  // Show loading state while auth is loading
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-white text-xl mb-4">🔐 Authenticating...</div>
+          <div className="text-gray-400">Please wait while we verify your access.</div>
+          <div className="mt-4 animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show auth error state
+  if (authError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4">🔐</div>
+          <h1 className="text-2xl font-bold text-white mb-4">Authentication Required</h1>
+          <p className="text-gray-400 mb-4">{authError}</p>
+          <div className="space-x-4">
+            <button
+              onClick={() => router.push('/')}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"
+            >
+              Go to Home & Sign In
+            </button>
+            <button
+              onClick={() => router.back()}
+              className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-lg font-medium"
+            >
+              Go Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state while data is being fetched
   if (!learningData) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-white text-xl mb-4">Loading learning content...</div>
+          <div className="text-white text-xl mb-4">📚 Loading learning content...</div>
           <div className="text-gray-400">If this takes too long, please go back and try again.</div>
+          <div className="mt-4 animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
           <button
             onClick={() => router.back()}
             className="mt-4 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg"
