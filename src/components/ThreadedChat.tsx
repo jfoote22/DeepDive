@@ -1083,8 +1083,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
 
     return (
       <div className="w-full space-y-2">
-        {/* Grok Settings */}
-        {selectedModel === 'grok' && (
+        {/* Grok Settings - Only show in main chat, not in threads */}
+        {selectedModel === 'grok' && !isThread && (
           <div className="flex items-center justify-between gap-2 flex-wrap">
             {/* Response Mode Buttons */}
             <div className="flex gap-2 flex-wrap">
@@ -1440,18 +1440,18 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         <div className={`flex-shrink-0 p-3 border-b-2 ${threadHeaderColorsEnabled ? colorScheme.border : 'border-custom'} ${threadHeaderColorsEnabled ? colorScheme.bg : 'bg-card/80'} shadow-sm`}>
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              {/* Thread number badge - always keeps original action-type colors */}
+              {/* Thread number badge - always visible */}
               <div className={`text-lg font-bold ${colorScheme.badgeText} ${colorScheme.badgeBg} px-3 py-1 rounded-lg border-2 ${colorScheme.badgeBorder} shadow-sm flex-shrink-0`}>
                 #{threads.findIndex(t => t.id === thread.id) + 1}
               </div>
               
-              {/* Action and source info - hide when 4+ threads in row to save space */}
-              {(!rowThreadCount || rowThreadCount < 4) && (
+              {/* Action and source info - hide progressively as space gets tighter */}
+              {(!rowThreadCount || rowThreadCount < 3) && (
                 <div className={`flex items-center gap-2 bg-black/20 px-2 py-1 rounded-lg flex-shrink-0 ${isCollapsed ? 'max-w-32' : ''}`}>
                   <span className={`font-semibold text-white ${isCollapsed ? 'text-xs' : 'text-sm'} truncate`}>
                     {getActionLabel(thread.actionType)}
                   </span>
-                  {!isCollapsed && (
+                  {!isCollapsed && (!rowThreadCount || rowThreadCount < 2) && (
                     <>
                       <span className="text-white/60 text-xs">•</span>
                       <span className="text-white/80 text-xs">{getContextSource(thread)}</span>
@@ -1460,8 +1460,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                 </div>
               )}
               
-              {/* Context dropdown - only show when not collapsed to prioritize control buttons */}
-              {thread.selectedContext && !isCollapsed && (
+              {/* Context dropdown - hide when space is constrained to prioritize control buttons */}
+              {thread.selectedContext && !isCollapsed && (!rowThreadCount || rowThreadCount < 4) && (
                 <button
                   onClick={() => toggleContextCollapse(thread.id)}
                   className="flex items-center gap-2 bg-accent-yellow/20 text-accent-yellow hover:bg-accent-yellow/30 px-3 py-1 rounded-lg border border-accent-yellow/30 transition-all text-sm font-medium flex-shrink-0"
@@ -1481,7 +1481,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
             </div>
             
             {/* Control buttons - always visible and prioritized */}
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-1 flex-shrink-0">
               <button
                 onClick={() => toggleThreadFullscreen(thread.id)}
                 className={`p-2 rounded-lg hover:bg-hover transition-colors ${
@@ -2148,21 +2148,6 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
             {/* Thread Rows Container */}
             <div className="flex-1 overflow-hidden p-2">
               <div className="h-full flex flex-col gap-2">
-                {/* Expand All Button */}
-                {threadRows.length > 0 && (
-                  <div className="flex justify-end mb-2">
-                    <button
-                      onClick={expandAllRows}
-                      className="px-3 py-1 text-sm bg-accent-blue/20 text-accent-blue hover:bg-accent-blue/30 rounded-lg transition-colors duration-200 flex items-center gap-1"
-                      title="Expand all thread rows"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 3v10a2 2 0 002 2h8a2 2 0 002-2V7M9 7h6" />
-                      </svg>
-                      Expand All
-                    </button>
-                  </div>
-                )}
                 {threadRows
                   .map((rowThreads, originalRowIndex) => ({ rowThreads, originalRowIndex }))
                   .filter(({ rowThreads, originalRowIndex }) => {
