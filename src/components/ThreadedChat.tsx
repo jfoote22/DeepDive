@@ -117,11 +117,16 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   // Fullscreen state for threads
   const [fullscreenThread, setFullscreenThread] = useState<string | null>(null);
   // Thread header color toggle state
-  const [threadHeaderColorsEnabled, setThreadHeaderColorsEnabled] = useState<boolean>(true);
+  const [threadHeaderColorsEnabled, setThreadHeaderColorsEnabled] = useState<boolean>(false);
   // Global context visibility toggle state
-  const [showAllContexts, setShowAllContexts] = useState<boolean>(true);
+  const [showAllContexts, setShowAllContexts] = useState<boolean>(false);
   // Split screen mode state
   const [isSplitScreenMode, setIsSplitScreenMode] = useState<boolean>(false);
+  
+  // New UI enhancement toggles
+  const [compactThreadHeaders, setCompactThreadHeaders] = useState<boolean>(false);
+  const [hideInputFields, setHideInputFields] = useState<boolean>(false);
+  const [hoveredThreadId, setHoveredThreadId] = useState<string | null>(null);
   
   // Learning snippets state
   const [learningSnippets, setLearningSnippets] = useState<Array<{
@@ -165,6 +170,14 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
 
   // Store references to thread chat instances for copying
   const threadChatRefs = useRef<{[key: string]: any}>({});
+
+  // Ensure collapsed contexts are properly initialized when showAllContexts is false
+  useEffect(() => {
+    if (!showAllContexts && threads.length > 0) {
+      const allThreadIds = threads.map(thread => thread.id);
+      setCollapsedContexts(new Set(allThreadIds));
+    }
+  }, [threads, showAllContexts]);
 
   const getApiEndpoint = (model: ModelProvider) => {
     switch (model) {
@@ -1468,16 +1481,16 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         data-thread-id={thread.id}
       >
         {/* Thread Header - Improved Readability */}
-        <div className={`flex-shrink-0 p-3 border-b-2 ${threadHeaderColorsEnabled ? colorScheme.border : 'border-custom'} ${threadHeaderColorsEnabled ? colorScheme.bg : 'bg-card/80'} shadow-sm`}>
+        <div className={`flex-shrink-0 ${compactThreadHeaders ? 'py-0 px-1' : 'py-0.5 px-1.5'} border-b-2 ${threadHeaderColorsEnabled ? colorScheme.border : 'border-custom'} ${threadHeaderColorsEnabled ? colorScheme.bg : 'bg-card/80'} shadow-sm transition-all duration-200`}>
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0 flex-1">
               {/* Thread number badge - always visible */}
-              <div className={`text-lg font-bold ${colorScheme.badgeText} ${colorScheme.badgeBg} px-3 py-1 rounded-lg border-2 ${colorScheme.badgeBorder} shadow-sm flex-shrink-0`}>
+              <div className={`${compactThreadHeaders ? 'text-sm font-bold text-white px-2 py-0.5' : `text-lg font-bold ${colorScheme.badgeText} ${colorScheme.badgeBg} px-3 py-1 rounded-lg border-2 ${colorScheme.badgeBorder} shadow-sm`} flex-shrink-0`}>
                 #{threads.findIndex(t => t.id === thread.id) + 1}
               </div>
               
-              {/* Action and source info - hide progressively as space gets tighter */}
-              {(!rowThreadCount || rowThreadCount < 3) && (
+              {/* Action and source info - hide in compact mode */}
+              {!compactThreadHeaders && (!rowThreadCount || rowThreadCount < 3) && (
                 <div className={`flex items-center gap-2 bg-black/20 px-2 py-1 rounded-lg flex-shrink-0 ${isCollapsed ? 'max-w-32' : ''}`}>
                   <span className={`font-semibold text-white ${isCollapsed ? 'text-xs' : 'text-sm'} truncate`}>
                     {getActionLabel(thread.actionType)}
@@ -1491,8 +1504,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                 </div>
               )}
               
-              {/* Context dropdown - hide when space is constrained to prioritize control buttons */}
-              {thread.selectedContext && !isCollapsed && (!rowThreadCount || rowThreadCount < 4) && (
+              {/* Context dropdown - hide in compact mode */}
+              {!compactThreadHeaders && thread.selectedContext && !isCollapsed && (!rowThreadCount || rowThreadCount < 4) && (
                 <button
                   onClick={() => toggleContextCollapse(thread.id)}
                   className="flex items-center gap-2 bg-accent-yellow/20 text-accent-yellow hover:bg-accent-yellow/30 px-3 py-1 rounded-lg border border-accent-yellow/30 transition-all text-sm font-medium flex-shrink-0"
@@ -1515,36 +1528,36 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
             <div className="flex items-center gap-1 flex-shrink-0">
               <button
                 onClick={() => toggleThreadFullscreen(thread.id)}
-                className={`p-2 rounded-lg hover:bg-hover transition-colors ${
+                className={`${compactThreadHeaders ? 'p-1' : 'p-2'} rounded-lg hover:bg-hover transition-colors ${
                   fullscreenThread === thread.id ? 'bg-accent-green/20 text-accent-green' : 'text-gray-400 hover:text-white'
                 }`}
                 title={fullscreenThread === thread.id ? 'Exit fullscreen' : 'Fullscreen thread'}
               >
-                <span className="text-lg font-bold">
+                <span className={`${compactThreadHeaders ? 'text-sm' : 'text-lg'} font-bold`}>
                   {fullscreenThread === thread.id ? '⊡' : '⊞'}
                 </span>
               </button>
               <button
                 onClick={() => rerunThreadContext(thread)}
-                className="p-2 rounded-lg hover:bg-hover transition-colors text-gray-400 hover:text-accent-orange"
+                className={`${compactThreadHeaders ? 'p-1' : 'p-2'} rounded-lg hover:bg-hover transition-colors text-gray-400 hover:text-accent-orange`}
                 title={`Rerun original ${getActionLabel(thread.actionType)} action`}
               >
-                <span className="text-lg font-bold">↻</span>
+                <span className={`${compactThreadHeaders ? 'text-sm' : 'text-lg'} font-bold`}>↻</span>
               </button>
               <button
                 onClick={() => toggleThreadExpansion(thread.id)}
-                className={`p-2 rounded-lg hover:bg-hover transition-colors ${
+                className={`${compactThreadHeaders ? 'p-1' : 'p-2'} rounded-lg hover:bg-hover transition-colors ${
                   isExpanded ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
                 }`}
                 title={isExpanded ? 'Collapse thread' : 'Expand thread'}
               >
-                <span className="text-lg font-bold">
+                <span className={`${compactThreadHeaders ? 'text-sm' : 'text-lg'} font-bold`}>
                   {isExpanded ? '←' : '→'}
                 </span>
               </button>
               <button
                 onClick={() => closeThread(thread.id)}
-                className="text-gray-400 hover:text-accent-red text-lg transition-colors p-1"
+                className={`text-gray-400 hover:text-accent-red ${compactThreadHeaders ? 'text-sm' : 'text-lg'} transition-colors p-1`}
               >
                 ×
               </button>
@@ -1552,7 +1565,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
           </div>
           
           {/* Context content with better styling */}
-          {thread.selectedContext && collapsedContexts.has(thread.id) && (
+          {thread.selectedContext && !collapsedContexts.has(thread.id) && (
             <div className="mt-3 bg-gradient-to-r from-accent-yellow/10 to-accent-yellow/5 border-l-4 border-accent-yellow/50 rounded-r-lg p-3">
               <div className="text-accent-yellow/90 italic text-sm leading-relaxed">
                 &quot;{thread.selectedContext.length > 150 ? thread.selectedContext.substring(0, 150) + '...' : thread.selectedContext}&quot;
@@ -1583,16 +1596,38 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         </div>
 
         {/* Thread Input */}
-        <div className="flex-shrink-0 p-3 bg-gradient-to-t from-slate-900/40 to-transparent border-t border-custom">
-          <ChatInput
-            isThread={true}
-            input={threadChat.input}
-            handleInputChange={threadChat.handleInputChange}
-            isLoading={threadChat.isLoading}
-            threadChat={threadChat}
-            showReasoning={threadChat.showReasoning}
-            setShowReasoning={threadChat.setShowReasoning}
-          />
+        <div 
+          className={`flex-shrink-0 transition-all duration-300 ease-in-out border-t border-custom ${
+            hideInputFields
+              ? hoveredThreadId === thread.id
+                ? 'p-3 bg-gradient-to-t from-slate-900/40 to-transparent h-auto'
+                : 'p-1 bg-gradient-to-t from-slate-900/60 to-slate-900/20 h-3'
+              : 'p-3 bg-gradient-to-t from-slate-900/40 to-transparent h-auto'
+          }`}
+        >
+          {hideInputFields && hoveredThreadId !== thread.id ? (
+            // Collapsed state - thin bar with visual indicator
+            <div 
+              className="flex items-center justify-center h-full cursor-pointer hover:bg-gradient-to-t hover:from-slate-900/80 hover:to-slate-900/40 transition-all duration-200"
+              onMouseEnter={() => setHoveredThreadId(thread.id)}
+              onMouseLeave={() => setHoveredThreadId(null)}
+            >
+              <div className="w-12 h-1 bg-accent-orange/40 rounded-full transition-all duration-200 hover:bg-accent-orange/60 hover:w-16"></div>
+            </div>
+          ) : (
+            // Expanded state - full input area
+            <div onMouseLeave={() => hideInputFields && setHoveredThreadId(null)}>
+              <ChatInput
+                isThread={true}
+                input={threadChat.input}
+                handleInputChange={threadChat.handleInputChange}
+                isLoading={threadChat.isLoading}
+                threadChat={threadChat}
+                showReasoning={threadChat.showReasoning}
+                setShowReasoning={threadChat.setShowReasoning}
+              />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -2117,7 +2152,29 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold text-white">Threads</h2>
                   <div className="flex items-center gap-3">
-                    {/* Thread Header Color Toggle */}
+                    {/* 1. Compact Thread Headers Toggle */}
+                    <button
+                      onClick={() => setCompactThreadHeaders(!compactThreadHeaders)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-200 ${
+                        compactThreadHeaders 
+                          ? 'bg-accent-green/20 text-accent-green border-accent-green/50 hover:bg-accent-green/30' 
+                          : 'bg-card/60 text-muted border-custom hover:bg-hover hover:text-white'
+                      }`}
+                      title={compactThreadHeaders ? 'Disable compact thread headers' : 'Enable compact thread headers'}
+                    >
+                      <span className="text-xs font-medium">
+                        {compactThreadHeaders ? '⬆️' : '⬇️'}
+                      </span>
+                      <div className={`w-8 h-4 rounded-full transition-all duration-200 ${
+                        compactThreadHeaders ? 'bg-accent-green' : 'bg-gray-600'
+                      }`}>
+                        <div className={`w-3 h-3 bg-white rounded-full mt-0.5 transition-transform duration-200 ${
+                          compactThreadHeaders ? 'translate-x-4' : 'translate-x-0.5'
+                        }`}></div>
+                      </div>
+                    </button>
+
+                    {/* 2. Thread Header Color Toggle */}
                     <button
                       onClick={() => setThreadHeaderColorsEnabled(!threadHeaderColorsEnabled)}
                       className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-200 ${
@@ -2139,7 +2196,29 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                       </div>
                     </button>
 
-                    {/* Context Visibility Toggle */}
+                    {/* 3. Hide Input Fields Toggle */}
+                    <button
+                      onClick={() => setHideInputFields(!hideInputFields)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-200 ${
+                        hideInputFields 
+                          ? 'bg-accent-orange/20 text-accent-orange border-accent-orange/50 hover:bg-accent-orange/30' 
+                          : 'bg-card/60 text-muted border-custom hover:bg-hover hover:text-white'
+                      }`}
+                      title={hideInputFields ? 'Show input fields by default' : 'Hide input fields (show on hover)'}
+                    >
+                      <span className="text-xs font-medium">
+                        {hideInputFields ? '👁️' : '✏️'}
+                      </span>
+                      <div className={`w-8 h-4 rounded-full transition-all duration-200 ${
+                        hideInputFields ? 'bg-accent-orange' : 'bg-gray-600'
+                      }`}>
+                        <div className={`w-3 h-3 bg-white rounded-full mt-0.5 transition-transform duration-200 ${
+                          hideInputFields ? 'translate-x-4' : 'translate-x-0.5'
+                        }`}></div>
+                      </div>
+                    </button>
+
+                    {/* 4. Context Visibility Toggle */}
                     <button
                       onClick={toggleAllContextsVisibility}
                       className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-200 ${
@@ -2161,7 +2240,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                       </div>
                     </button>
 
-                    {/* Learning Snippets Toggle */}
+                    {/* 5. Learning Snippets Toggle - Far Right */}
                     <button
                       onClick={() => setShowLearningModal(!showLearningModal)}
                       className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-200 ${
