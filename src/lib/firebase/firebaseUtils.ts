@@ -351,32 +351,24 @@ export interface EnhancedLearningData {
 export interface GrokAnalysis {
   summary: string;
   learningObjectives: string[];
-  keyTopics: string[];
   flashcards: Array<{
-    question: string;
-    answer: string;
-    category: string;
-    difficulty: 'beginner' | 'intermediate' | 'advanced';
+    front: string;
+    back: string;
   }>;
   quizQuestions: Array<{
     question: string;
-    options?: string[];
-    correctAnswer: string;
+    options: string[];
+    correctAnswer: number;
     explanation: string;
-    type: 'multiple_choice' | 'short_answer' | 'true_false';
   }>;
   studyGuide: {
-    mainConcepts: string[];
-    processes: string[];
-    keyInsights: string[];
-    practicalApplications: string[];
+    keyTopics: Array<{
+      title: string;
+      content: string;
+    }>;
+    importantConcepts: string[];
+    practiceQuestions: string[];
   };
-  reviewSessions: Array<{
-    title: string;
-    content: string;
-    timeEstimate: string;
-    difficulty: 'beginner' | 'intermediate' | 'advanced';
-  }>;
 }
 
 export const saveLearningData = async (learningData: LearningData | EnhancedLearningData) => {

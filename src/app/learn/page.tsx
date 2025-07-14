@@ -34,32 +34,24 @@ interface EnhancedLearningData {
 interface GrokAnalysis {
   summary: string;
   learningObjectives: string[];
-  keyTopics: string[];
   flashcards: Array<{
-    question: string;
-    answer: string;
-    category: string;
-    difficulty: 'beginner' | 'intermediate' | 'advanced';
+    front: string;
+    back: string;
   }>;
   quizQuestions: Array<{
     question: string;
-    options?: string[];
-    correctAnswer: string;
+    options: string[];
+    correctAnswer: number;
     explanation: string;
-    type: 'multiple_choice' | 'short_answer' | 'true_false';
   }>;
   studyGuide: {
-    mainConcepts: string[];
-    processes: string[];
-    keyInsights: string[];
-    practicalApplications: string[];
+    keyTopics: Array<{
+      title: string;
+      content: string;
+    }>;
+    importantConcepts: string[];
+    practiceQuestions: string[];
   };
-  reviewSessions: Array<{
-    title: string;
-    content: string;
-    timeEstimate: string;
-    difficulty: 'beginner' | 'intermediate' | 'advanced';
-  }>;
 }
 
 type ViewMode = 'ai-flashcards' | 'ai-quiz' | 'study-guide';
@@ -296,22 +288,30 @@ function LearnPageContent() {
   if (!analysis) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center max-w-md mx-auto">
           <div className="text-6xl mb-4">🤖</div>
-          <h1 className="text-2xl font-bold text-white mb-4">AI Analysis Required</h1>
-          <p className="text-gray-400 mb-4">
-            This learning hub requires AI analysis to be available. The Grok 4 analysis may have failed during generation.
+          <h1 className="text-2xl font-bold text-white mb-4">Grok 4 Analysis Failed</h1>
+          <p className="text-gray-400 mb-6">
+            The AI analysis with Grok 4 failed to complete. This could be due to API timeouts or content processing issues.
           </p>
-          <div className="space-x-4">
+          <div className="bg-slate-800/50 p-4 rounded-lg mb-6">
+            <p className="text-sm text-gray-300 mb-2">AI Features require successful analysis:</p>
+            <ul className="text-sm text-gray-400 space-y-1">
+              <li>🧠 AI-Generated Flashcards</li>
+              <li>📝 AI-Powered Quiz</li>
+              <li>📚 Intelligent Study Guide</li>
+            </ul>
+          </div>
+          <div className="space-y-3">
             <button
               onClick={() => router.push('/')}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"
             >
-              Try Creating New Learning Tools
+              Create New Learning Content
             </button>
             <button
               onClick={() => router.back()}
-              className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-lg font-medium"
+              className="w-full bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-lg font-medium"
             >
               Go Back
             </button>
@@ -336,12 +336,6 @@ function LearnPageContent() {
       id: `thread-${r.threadIndex}-${r.responseIndex}`
     }))
   ] : [];
-
-
-
-
-
-
 
   const renderAIFlashcards = () => {
     if (!analysis || !analysis.flashcards || analysis.flashcards.length === 0) {
@@ -384,26 +378,23 @@ function LearnPageContent() {
           <div className="bg-slate-700 rounded-lg p-8 mb-6 min-h-[300px] flex flex-col justify-center">
             <div className="text-center">
               <div className="text-lg font-semibold text-white mb-4">
-                {card.question}
+                {card.front}
               </div>
               
               <div className="mb-4">
                 <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                  card.difficulty === 'beginner' ? 'bg-green-600/20 text-green-400' :
-                  card.difficulty === 'intermediate' ? 'bg-yellow-600/20 text-yellow-400' :
+                  card.back === 'beginner' ? 'bg-green-600/20 text-green-400' :
+                  card.back === 'intermediate' ? 'bg-yellow-600/20 text-yellow-400' :
                   'bg-red-600/20 text-red-400'
                 }`}>
-                  {card.difficulty}
-                </span>
-                <span className="ml-2 inline-block px-3 py-1 rounded-full text-sm font-medium bg-blue-600/20 text-blue-400">
-                  {card.category}
+                  {card.back}
                 </span>
               </div>
 
               {showAIAnswer && (
                 <div className="mt-4 p-4 bg-slate-800 rounded-lg">
                   <div className="text-gray-300">
-                    <ReactMarkdown>{card.answer}</ReactMarkdown>
+                    <ReactMarkdown>{card.back}</ReactMarkdown>
                   </div>
                 </div>
               )}
@@ -473,7 +464,7 @@ function LearnPageContent() {
     const calculateScore = () => {
       let correct = 0;
       analysis.quizQuestions.forEach((question, index) => {
-        if (userAnswers[index] === question.correctAnswer) {
+        if (userAnswers[index] === question.correctAnswer.toString()) {
           correct++;
         }
       });
@@ -489,7 +480,7 @@ function LearnPageContent() {
             <h2 className="text-3xl font-bold text-white mb-4">Quiz Complete!</h2>
             <div className="text-5xl font-bold text-green-400 mb-4">{score}%</div>
             <p className="text-gray-400 mb-8">
-              You scored {Object.values(userAnswers).filter((answer, index) => answer === analysis.quizQuestions[index].correctAnswer).length} out of {analysis.quizQuestions.length} questions correctly
+              You scored {Object.values(userAnswers).filter((answer, index) => answer === analysis.quizQuestions[index].correctAnswer.toString()).length} out of {analysis.quizQuestions.length} questions correctly
             </p>
             
             <button
@@ -523,35 +514,23 @@ function LearnPageContent() {
 
           <div className="bg-slate-700 rounded-lg p-8 mb-6">
             <h3 className="text-xl font-semibold text-white mb-6">
-              {currentQuestion.question}
+              {analysis.quizQuestions[currentQuizIndex].question}
             </h3>
 
             <div className="space-y-3">
-              {currentQuestion.type === 'multiple_choice' && currentQuestion.options ? (
-                currentQuestion.options.map((option, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setSelectedAnswer(option)}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition-colors ${
-                      selectedAnswer === option
-                        ? 'border-blue-500 bg-blue-600/20 text-blue-400'
-                        : 'border-slate-600 bg-slate-800 text-gray-300 hover:border-slate-500'
-                    }`}
-                  >
-                    {String.fromCharCode(65 + index)}. {option}
-                  </button>
-                ))
-              ) : (
-                <div>
-                  <input
-                    type="text"
-                    value={selectedAnswer}
-                    onChange={(e) => setSelectedAnswer(e.target.value)}
-                    placeholder="Enter your answer..."
-                    className="w-full p-4 bg-slate-800 border-2 border-slate-600 rounded-lg text-white placeholder-gray-400 focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-              )}
+              {analysis.quizQuestions[currentQuizIndex].options.map((option, index) => (
+                <button
+                  key={index}
+                  onClick={() => setSelectedAnswer(option)}
+                  className={`w-full text-left p-4 rounded-lg border-2 transition-colors ${
+                    selectedAnswer === option
+                      ? 'border-blue-500 bg-blue-600/20 text-blue-400'
+                      : 'border-slate-600 bg-slate-800 text-gray-300 hover:border-slate-500'
+                  }`}
+                >
+                  {String.fromCharCode(65 + index)}. {option}
+                </button>
+              ))}
             </div>
 
             <button
@@ -624,87 +603,45 @@ function LearnPageContent() {
         <div className="bg-slate-800 rounded-lg p-6">
           <h3 className="text-xl font-bold text-white mb-4">💡 Main Concepts</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {analysis.studyGuide.mainConcepts.map((concept, index) => (
+            {analysis.studyGuide.keyTopics.map((topic, index) => (
               <div key={index} className="bg-slate-700 rounded-lg p-4">
                 <div className="text-gray-300">
-                  <ReactMarkdown>{concept}</ReactMarkdown>
+                  <ReactMarkdown>{topic.content}</ReactMarkdown>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Processes */}
-        {analysis.studyGuide.processes.length > 0 && (
-          <div className="bg-slate-800 rounded-lg p-6">
-            <h3 className="text-xl font-bold text-white mb-4">⚙️ Key Processes</h3>
-            <div className="space-y-4">
-              {analysis.studyGuide.processes.map((process, index) => (
-                <div key={index} className="bg-slate-700 rounded-lg p-4">
-                  <div className="text-gray-300">
-                    <ReactMarkdown>{process}</ReactMarkdown>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Key Insights */}
+        {/* Important Concepts */}
         <div className="bg-slate-800 rounded-lg p-6">
-          <h3 className="text-xl font-bold text-white mb-4">🔍 Key Insights</h3>
-          <div className="space-y-3">
-            {analysis.studyGuide.keyInsights.map((insight, index) => (
-              <div key={index} className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-2 h-2 bg-yellow-400 rounded-full mt-2"></span>
-                <span className="text-gray-300">{insight}</span>
-              </div>
+          <h3 className="text-xl font-bold text-white mb-4">💡 Important Concepts</h3>
+          <ul className="space-y-2">
+            {analysis.studyGuide.importantConcepts.map((concept, index) => (
+              <li key={index} className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                  {index + 1}
+                </span>
+                <span className="text-gray-300">{concept}</span>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
 
-        {/* Practical Applications */}
+        {/* Practice Questions */}
         <div className="bg-slate-800 rounded-lg p-6">
-          <h3 className="text-xl font-bold text-white mb-4">🚀 Practical Applications</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {analysis.studyGuide.practicalApplications.map((application, index) => (
-              <div key={index} className="bg-slate-700 rounded-lg p-4">
-                <div className="text-gray-300">
-                  <ReactMarkdown>{application}</ReactMarkdown>
-                </div>
-              </div>
+          <h3 className="text-xl font-bold text-white mb-4">🚀 Practice Questions</h3>
+          <ul className="space-y-2">
+            {analysis.studyGuide.practiceQuestions.map((question, index) => (
+              <li key={index} className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                  {index + 1}
+                </span>
+                <span className="text-gray-300">{question}</span>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
-
-        {/* Review Sessions */}
-        {analysis.reviewSessions.length > 0 && (
-          <div className="bg-slate-800 rounded-lg p-6">
-            <h3 className="text-xl font-bold text-white mb-4">📅 Recommended Review Sessions</h3>
-            <div className="space-y-4">
-              {analysis.reviewSessions.map((session, index) => (
-                <div key={index} className="bg-slate-700 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-lg font-semibold text-white">{session.title}</h4>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-400">⏱️ {session.timeEstimate}</span>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        session.difficulty === 'beginner' ? 'bg-green-600/20 text-green-400' :
-                        session.difficulty === 'intermediate' ? 'bg-yellow-600/20 text-yellow-400' :
-                        'bg-red-600/20 text-red-400'
-                      }`}>
-                        {session.difficulty}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-gray-300">
-                    <ReactMarkdown>{session.content}</ReactMarkdown>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     );
   };

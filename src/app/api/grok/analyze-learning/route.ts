@@ -3,6 +3,30 @@ import { generateText } from "ai";
 
 export const runtime = "edge";
 
+// Type definitions for the analysis result
+interface AnalysisResult {
+  summary: string;
+  learningObjectives: string[];
+  flashcards: {
+    front: string;
+    back: string;
+  }[];
+  quizQuestions: {
+    question: string;
+    options: string[];
+    correctAnswer: number;
+    explanation: string;
+  }[];
+  studyGuide: {
+    keyTopics: {
+      title: string;
+      content: string;
+    }[];
+    importantConcepts: string[];
+    practiceQuestions: string[];
+  };
+}
+
 // Add timeout wrapper for API calls
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -82,63 +106,64 @@ export async function POST(req: Request) {
       timestamp: new Date().toISOString()
     });
     
-    const systemPrompt = `You are Grok4, an expert educational content creator. Your task is to analyze a DeepDive learning session and create comprehensive, intelligent learning tools.
+    const systemPrompt = `
+You are an AI learning assistant that analyzes educational content and creates comprehensive learning materials.
 
-ANALYSIS TASK:
-1. Analyze the conversation content to identify key concepts, facts, processes, and insights
-2. Extract the most important learning objectives and educational value
-3. Create engaging, educational content that helps users learn and retain information
-4. Generate content that goes beyond simple copying - synthesize and organize information pedagogically
+CRITICAL: You must respond with ONLY valid JSON. No markdown, no code blocks, no explanations - just pure JSON.
 
-REQUIRED OUTPUT FORMAT (Valid JSON only):
+Analyze the provided learning content and create:
+1. A comprehensive summary
+2. Learning objectives
+3. Interactive flashcards (minimum 8, maximum 15)
+4. Quiz questions (minimum 6, maximum 12)
+5. A detailed study guide
+
+Respond with this EXACT JSON structure:
 {
-  "summary": "A comprehensive summary of what was learned in this DeepDive session",
-  "learningObjectives": ["List of 3-5 specific learning objectives"],
-  "keyTopics": ["List of main topics covered"],
+  "summary": "A comprehensive summary of the learning content",
+  "learningObjectives": [
+    "Objective 1",
+    "Objective 2"
+  ],
   "flashcards": [
     {
-      "question": "Thoughtfully crafted question that tests understanding",
-      "answer": "Clear, educational answer with context",
-      "category": "Topic category",
-      "difficulty": "beginner|intermediate|advanced"
+      "front": "Question or concept",
+      "back": "Answer or explanation"
     }
   ],
   "quizQuestions": [
     {
-      "question": "Multiple choice or short answer question",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswer": "Correct answer or option letter",
-      "explanation": "Why this is correct and what it teaches",
-      "type": "multiple_choice|short_answer|true_false"
+      "question": "Multiple choice question",
+      "options": ["A", "B", "C", "D"],
+      "correctAnswer": 0,
+      "explanation": "Why this answer is correct"
     }
   ],
   "studyGuide": {
-    "mainConcepts": ["List of core concepts with brief explanations"],
-    "processes": ["Step-by-step processes or workflows discussed"],
-    "keyInsights": ["Important insights or takeaways"],
-    "practicalApplications": ["How this knowledge can be applied"]
-  },
-  "reviewSessions": [
-    {
-      "title": "Review session title",
-      "content": "Structured review content focusing on specific aspects",
-      "timeEstimate": "Estimated study time",
-      "difficulty": "beginner|intermediate|advanced"
-    }
-  ]
+    "keyTopics": [
+      {
+        "title": "Topic Title",
+        "content": "Detailed explanation"
+      }
+    ],
+    "importantConcepts": [
+      "Concept 1",
+      "Concept 2"
+    ],
+    "practiceQuestions": [
+      "Practice question 1",
+      "Practice question 2"
+    ]
+  }
 }
 
-GUIDELINES:
-- Create 8-15 flashcards focusing on different aspects and difficulty levels
-- Generate 5-10 quiz questions of varying types and difficulties
-- Ensure questions test understanding, not just memorization
-- Include practical applications and real-world relevance
-- Make content engaging and educationally valuable
-- Focus on synthesis rather than simple repetition
-- Tailor difficulty to match the complexity of the source content
-- CRITICAL: Return ONLY valid JSON - no extra text, no markdown formatting
-
-Analyze the following DeepDive session content and generate comprehensive learning tools:`;
+IMPORTANT: 
+- Ensure all strings are properly escaped
+- Do not include any trailing commas
+- Do not include any comments in the JSON
+- Keep all content concise but comprehensive
+- Make sure the JSON is complete and valid
+`;
 
     console.log('🚀 Starting Grok 4 API call...');
     
@@ -182,34 +207,56 @@ Analyze the following DeepDive session content and generate comprehensive learni
     console.log('📄 Response preview:', result.text.substring(0, 200));
     
     // Parse JSON response with better error handling
-    let analysisResult;
+    let analysisResult: AnalysisResult;
     try {
-      // Clean the response text
+      // Clean the response text more thoroughly
       let cleanedText = result.text.trim();
       
       // Remove any markdown code blocks
-      cleanedText = cleanedText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      cleanedText = cleanedText.replace(/```json\n?/gi, '').replace(/```\n?/g, '');
       
-      // Try to find JSON within the response
-      const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        cleanedText = jsonMatch[0];
+      // Remove any leading/trailing non-JSON text
+      cleanedText = cleanedText.replace(/^[^{]*/, '').replace(/[^}]*$/, '');
+      
+      // Try to find and extract the JSON object
+      const jsonStart = cleanedText.indexOf('{');
+      const jsonEnd = cleanedText.lastIndexOf('}');
+      
+      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+        cleanedText = cleanedText.substring(jsonStart, jsonEnd + 1);
       }
+      
+      console.log('🧹 Cleaned response length:', cleanedText.length);
+      console.log('🧹 Response starts with:', cleanedText.substring(0, 100));
+      console.log('🧹 Response ends with:', cleanedText.substring(cleanedText.length - 100));
       
       analysisResult = JSON.parse(cleanedText);
       console.log('✅ JSON parsed successfully');
       
-      // Validate the structure
-      if (!analysisResult.summary || !analysisResult.flashcards || !analysisResult.quizQuestions) {
+      // Validate the structure more thoroughly
+      if (!analysisResult.summary || !analysisResult.learningObjectives || 
+          !analysisResult.flashcards || !analysisResult.quizQuestions || 
+          !analysisResult.studyGuide) {
         throw new Error('Invalid analysis structure - missing required fields');
+      }
+      
+      // Validate arrays have content
+      if (!Array.isArray(analysisResult.flashcards) || analysisResult.flashcards.length === 0) {
+        throw new Error('Invalid analysis structure - flashcards must be a non-empty array');
+      }
+      
+      if (!Array.isArray(analysisResult.quizQuestions) || analysisResult.quizQuestions.length === 0) {
+        throw new Error('Invalid analysis structure - quizQuestions must be a non-empty array');
       }
       
     } catch (parseError) {
       console.error('❌ JSON parsing failed:', parseError);
-      console.error('Raw response (first 1000 chars):', result.text.substring(0, 1000));
+      console.error('Raw response length:', result.text.length);
+      console.error('Raw response sample (first 500 chars):', result.text.substring(0, 500));
+      console.error('Raw response sample (last 500 chars):', result.text.substring(result.text.length - 500));
       
-      // More specific error for JSON parsing issues
-      throw new Error(`JSON parsing failed: ${parseError instanceof Error ? parseError.message : 'Unknown parsing error'}`);
+      // Try to salvage partial JSON or provide fallback
+      throw new Error(`JSON parsing failed: ${parseError instanceof Error ? parseError.message : 'Unknown parsing error'}. Response length: ${result.text.length} chars`);
     }
     
     const totalElapsed = Date.now() - startTime;
