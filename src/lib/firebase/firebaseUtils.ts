@@ -90,12 +90,14 @@ export interface DeepDiveData {
   mainMessages: any[];
   threads: any[];
   selectedModel: string;
+  learningSnippets?: any[]; // Learning snippets for enhanced learning tools
   createdAt: Timestamp;
   updatedAt: Timestamp;
   userId: string;
   metadata?: {
     totalMessages: number;
     totalThreads: number;
+    totalSnippets?: number;
     lastActiveThread?: string;
   };
 }
@@ -136,6 +138,12 @@ export const saveDeepDive = async (deepDiveData: Omit<DeepDiveData, 'id' | 'crea
         actionType: thread.actionType || 'ask',
         parentThreadId: thread.parentThreadId || null,
       })),
+      learningSnippets: (deepDiveData.learningSnippets || []).map(snippet => ({
+        id: snippet.id || `snippet-${Date.now()}-${Math.random()}`,
+        text: snippet.text || '',
+        source: snippet.source || 'Unknown',
+        timestamp: snippet.timestamp || Date.now(),
+      })),
       selectedModel: deepDiveData.selectedModel || 'anthropic',
       userId: auth.currentUser.uid,
       createdAt: Timestamp.now(),
@@ -143,6 +151,7 @@ export const saveDeepDive = async (deepDiveData: Omit<DeepDiveData, 'id' | 'crea
       metadata: {
         totalMessages: deepDiveData.mainMessages?.length || 0,
         totalThreads: deepDiveData.threads?.length || 0,
+        totalSnippets: deepDiveData.learningSnippets?.length || 0,
         lastActiveThread: deepDiveData.metadata?.lastActiveThread || null,
       },
     };
@@ -225,11 +234,22 @@ export const updateDeepDive = async (deepDiveId: string, updates: Partial<DeepDi
       }));
     }
 
+    // Handle learningSnippets
+    if (updates.learningSnippets !== undefined) {
+      cleanUpdates.learningSnippets = (updates.learningSnippets || []).map(snippet => ({
+        id: snippet.id || `snippet-${Date.now()}-${Math.random()}`,
+        text: snippet.text || '',
+        source: snippet.source || 'Unknown',
+        timestamp: snippet.timestamp || Date.now(),
+      }));
+    }
+
     // Handle metadata
-    if (updates.metadata !== undefined || updates.mainMessages !== undefined || updates.threads !== undefined) {
+    if (updates.metadata !== undefined || updates.mainMessages !== undefined || updates.threads !== undefined || updates.learningSnippets !== undefined) {
       cleanUpdates.metadata = {
         totalMessages: updates.mainMessages?.length || 0,
         totalThreads: updates.threads?.length || 0,
+        totalSnippets: updates.learningSnippets?.length || 0,
         lastActiveThread: updates.metadata?.lastActiveThread || null,
       };
     }

@@ -92,21 +92,32 @@ export async function POST(req: Request) {
     // Prepare content for analysis with smaller size limit
     const mainContent = learningData.mainResponses?.map((response: any) => response.content).join('\n\n') || '';
     const threadContent = learningData.threadResponses?.map((response: any) => response.content).join('\n\n') || '';
+    const snippetsContent = learningData.learningSnippets?.map((snippet: any) => 
+      `[${snippet.source}]: ${snippet.content}`
+    ).join('\n\n') || '';
     
     // Reduce content size to prevent timeouts - limit to 6000 characters total
     const maxContentLength = 6000;
-    let fullContent = (mainContent + '\n\n' + threadContent).substring(0, maxContentLength);
+    let fullContent = [mainContent, threadContent, snippetsContent]
+      .filter(content => content.length > 0)
+      .join('\n\n---\n\n')
+      .substring(0, maxContentLength);
     
     // If content was truncated, add a note
-    if ((mainContent + '\n\n' + threadContent).length > maxContentLength) {
+    const originalContentLength = [mainContent, threadContent, snippetsContent]
+      .filter(content => content.length > 0)
+      .join('\n\n---\n\n').length;
+      
+    if (originalContentLength > maxContentLength) {
       fullContent += '\n\n[Content truncated for processing...]';
     }
 
     console.log('📝 Content prepared:', {
       mainContentLength: mainContent.length,
       threadContentLength: threadContent.length,
+      snippetsContentLength: snippetsContent.length,
       totalContentLength: fullContent.length,
-      wasTruncated: (mainContent + '\n\n' + threadContent).length > maxContentLength,
+      wasTruncated: originalContentLength > maxContentLength,
       timestamp: new Date().toISOString()
     });
     
@@ -114,6 +125,13 @@ export async function POST(req: Request) {
 You are an AI learning assistant that analyzes educational content and creates comprehensive learning materials.
 
 CRITICAL: You must respond with ONLY valid JSON. No markdown, no code blocks, no explanations - just pure JSON.
+
+The content provided may include:
+- Main conversation responses
+- Thread-based discussions
+- User-selected learning snippets (marked with [Source]: content format)
+
+Pay special attention to the learning snippets as they represent content the user specifically wanted to emphasize in their learning materials.
 
 Analyze the provided learning content and create:
 1. A comprehensive summary

@@ -592,6 +592,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
       selectedModel: selectedModel,
       activeThreadId: activeThreadId,
       uiState: uiState, // New: preserve UI state
+      learningSnippets: learningSnippets, // Include learning snippets for content selection
     };
   };
 
@@ -601,6 +602,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
       title: state.title || 'Unknown',
       mainMessagesCount: state.mainMessages?.length || 0,
       threadsCount: state.threads?.length || 0,
+      snippetsCount: state.learningSnippets?.length || 0, // Add snippet count to debug log
       selectedModel: state.selectedModel
     });
 
@@ -639,21 +641,24 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         // Set active thread
         setActiveThreadId(state.activeThreadId || null);
         
-        // Load main chat messages - try different approaches
+        // Load learning snippets from saved state
+        if (state.learningSnippets && Array.isArray(state.learningSnippets)) {
+          console.log('📚 Loading learning snippets:', state.learningSnippets.length);
+          setLearningSnippets(state.learningSnippets);
+        } else {
+          console.log('📚 No learning snippets found in saved state');
+          setLearningSnippets([]);
+        }
+        
+        // Load main messages if available
         if (state.mainMessages && state.mainMessages.length > 0) {
-          console.log('📧 Loading main chat messages:', state.mainMessages.length);
-          
-          // Try the setMessages method if it exists
-          if (mainChat.setMessages && typeof mainChat.setMessages === 'function') {
-            console.log('✅ Using setMessages method');
-            mainChat.setMessages(state.mainMessages);
-          } else {
-            console.warn('⚠️ setMessages method not available on useChat hook');
-            // Alternative approach: We'll need to manually populate the messages
-            // This is a limitation - the useChat hook may not support direct message setting
-            console.log('ℹ️ Note: Messages may not load directly due to useChat limitations');
-            console.log('💡 Consider refreshing the conversation or manually re-asking questions');
-          }
+          console.log('💬 Loading main chat messages:', state.mainMessages.length);
+          const formattedMessages: Message[] = state.mainMessages.map((msg: any) => ({
+            id: msg.id || Date.now().toString(),
+            role: msg.role,
+            content: msg.content,
+          }));
+          mainChat.setMessages(formattedMessages);
         }
         
         // Restore UI state if available
@@ -710,8 +715,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
     // Clear thread chat instances
     setThreadChatInstances({});
     setThreadMessagesToLoad({});
-    // Force a re-render by updating the key
-    window.location.reload();
+    // Remove the window.location.reload() to prevent infinite loop during state loading
+    // Force a re-render by updating the key is no longer needed
   };
 
   // Function to add snippets to learning collection
@@ -1265,11 +1270,11 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
         };
       case 'learning':
         return {
-          bg: 'bg-violet-500',
-          border: 'border-violet-500',
+          bg: 'bg-accent-purple',
+          border: 'border-accent-purple',
           badgeText: 'text-white',
-          badgeBg: 'bg-violet-500',
-          badgeBorder: 'border-violet-500'
+          badgeBg: 'bg-accent-purple',
+          badgeBorder: 'border-accent-purple'
         };
       case 'links':
         return {
@@ -2339,13 +2344,6 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                 colorScheme: getActionColorScheme('examples')
               },
               {
-                action: 'learning',
-                icon: '🧠',
-                label: 'Include with learning tools',
-                onClick: () => addToLearningSnippets(selectedText),
-                colorScheme: getActionColorScheme('learning')
-              },
-              {
                 action: 'links',
                 icon: '🔗',
                 label: 'Get links',
@@ -2358,6 +2356,13 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                 label: 'Get videos',
                 onClick: () => createNewThread(`Please suggest relevant YouTube videos, tutorials, and video content related to: "${selectedText}". Include educational videos, tutorials, documentaries, and other video resources that would help understand this topic better.`, false, true, 'videos'),
                 colorScheme: getActionColorScheme('videos')
+              },
+              {
+                action: 'learning',
+                icon: '🧠',
+                label: 'Include in Learning Tools',
+                onClick: () => addToLearningSnippets(selectedText),
+                colorScheme: getActionColorScheme('learning')
               }
             ].map((item) => (
               <button
@@ -2432,7 +2437,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                   <div className="text-6xl mb-4">🧠</div>
                   <h3 className="text-xl font-semibold text-white mb-2">No Learning Snippets Yet</h3>
                   <p className="text-gray-400 mb-4">
-                    Select text in AI responses and choose &quot;Include with learning tools&quot; to build your learning collection.
+                    Select text in AI responses and choose &quot;Include in Learning Tools&quot; to build your learning collection.
                   </p>
                   <div className="text-sm text-violet-400 bg-violet-500/10 p-4 rounded-lg border border-violet-500/20 max-w-md mx-auto">
                     <strong>💡 Pro tip:</strong> These snippets will be automatically included when generating learning tools to provide more comprehensive and personalized results.

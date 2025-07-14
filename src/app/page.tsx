@@ -4,6 +4,7 @@ import { useRef, useState, useContext, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ThreadedChat from "../components/ThreadedChat";
 import FirebaseTest from "../components/FirebaseTest";
+import LearningContentSelector from "../components/LearningContentSelector";
 import { AuthContext } from '../lib/contexts/AuthContext';
 import { saveDeepDive, getUserDeepDives, updateDeepDive, deleteDeepDive, DeepDiveData, saveLearningData } from '../lib/firebase/firebaseUtils';
 import Image from 'next/image';
@@ -53,6 +54,8 @@ function HomeContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [currentDeepDiveId, setCurrentDeepDiveId] = useState<string | null>(null);
+  const [showContentSelector, setShowContentSelector] = useState(false);
+  const [currentChatState, setCurrentChatState] = useState<any>(null);
 
   // Load user's saved deep dives when they sign in
   useEffect(() => {
@@ -125,11 +128,31 @@ function HomeContent() {
       // Validate that there's content to process
       const hasMainMessages = chatState.mainMessages && chatState.mainMessages.length > 0;
       const hasThreads = chatState.threads && chatState.threads.length > 0;
+      const hasSnippets = chatState.learningSnippets && chatState.learningSnippets.length > 0;
       
-      if (!hasMainMessages && !hasThreads) {
+      if (!hasMainMessages && !hasThreads && !hasSnippets) {
         alert('⚠️ No conversation data found!\n\nPlease start a conversation with the AI first, then try generating learning tools.');
         return;
       }
+
+      // Store chat state and show content selector modal
+      setCurrentChatState(chatState);
+      setShowContentSelector(true);
+      return;
+    } catch (error) {
+      console.error('❌ Failed to prepare learning tools:', error);
+      alert(`❌ Failed to prepare learning tools.\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease try again.`);
+    }
+  };
+
+  // New function to actually generate learning tools based on selections
+  const handleGenerateWithSelections = async (selections: any) => {
+    if (!currentChatState || !user) {
+      return;
+    }
+
+    try {
+      setShowContentSelector(false);
 
       // Auto-save the DeepDive if it's not saved yet
       let deepDiveId = currentDeepDiveId;
@@ -143,13 +166,15 @@ function HomeContent() {
           const deepDiveData = {
             title: defaultTitle,
             description: 'Auto-saved before generating learning tools',
-            mainMessages: chatState.mainMessages || [],
-            threads: chatState.threads || [],
-            selectedModel: chatState.selectedModel || 'anthropic',
+            mainMessages: currentChatState.mainMessages || [],
+            threads: currentChatState.threads || [],
+            selectedModel: currentChatState.selectedModel || 'anthropic',
+            learningSnippets: currentChatState.learningSnippets || [], // Include learning snippets
             metadata: {
-              totalMessages: (chatState.mainMessages || []).length,
-              totalThreads: (chatState.threads || []).length,
-              lastActiveThread: chatState.activeThreadId,
+              totalMessages: (currentChatState.mainMessages || []).length,
+              totalThreads: (currentChatState.threads || []).length,
+              totalSnippets: (currentChatState.learningSnippets || []).length,
+              lastActiveThread: currentChatState.activeThreadId,
             },
           };
 
@@ -167,42 +192,62 @@ function HomeContent() {
         }
       }
 
-      // Extract AI responses from main chat
-      const mainResponses = (chatState.mainMessages || [])
-        .filter((msg: any) => msg.role === 'assistant')
-        .map((msg: any, index: number) => ({
-          content: msg.content,
-          index: index + 1
-        }));
+      // Extract AI responses from main chat (if selected)
+      const mainResponses = selections.includeMainThread 
+        ? (currentChatState.mainMessages || [])
+            .filter((msg: any) => msg.role === 'assistant')
+            .map((msg: any, index: number) => ({
+              content: msg.content,
+              index: index + 1
+            }))
+        : [];
 
-      // Extract AI responses from threads
+      // Extract AI responses from selected threads
       const threadResponses: any[] = [];
-      (chatState.threads || []).forEach((thread: any, threadIndex: number) => {
-        const threadAIResponses = (thread.messages || [])
-          .filter((msg: any) => msg.role === 'assistant');
-        
-        threadAIResponses.forEach((msg: any, responseIndex: number) => {
-          threadResponses.push({
-            content: msg.content,
-            threadTitle: thread.title || `Thread ${threadIndex + 1}`,
-            context: thread.selectedContext || '',
-            threadIndex: threadIndex + 1,
-            responseIndex: responseIndex + 1
-          });
+      if (selections.selectedThreadIds.length > 0) {
+        (currentChatState.threads || []).forEach((thread: any, threadIndex: number) => {
+          if (selections.selectedThreadIds.includes(thread.id)) {
+            const threadAIResponses = (thread.messages || [])
+              .filter((msg: any) => msg.role === 'assistant');
+            
+            threadAIResponses.forEach((msg: any, responseIndex: number) => {
+              threadResponses.push({
+                content: msg.content,
+                threadTitle: thread.title || `Thread ${threadIndex + 1}`,
+                context: thread.selectedContext || '',
+                threadIndex: threadIndex + 1,
+                responseIndex: responseIndex + 1
+              });
+            });
+          }
         });
-      });
+      }
+
+      // Extract selected learning snippets
+      const selectedSnippets = selections.selectedSnippetIds.length > 0
+        ? (currentChatState.learningSnippets || [])
+            .filter((snippet: any) => selections.selectedSnippetIds.includes(snippet.id))
+            .map((snippet: any) => ({
+              content: snippet.text,
+              source: snippet.source,
+              timestamp: snippet.timestamp
+            }))
+        : [];
 
       // Prepare data for learning tools
       const learningData = {
         mainResponses,
-        threadResponses
+        threadResponses,
+        learningSnippets: selectedSnippets
       };
 
-      console.log('🎓 Generated learning data:', {
+      console.log('🎓 Generated learning data with selections:', {
         deepDiveId,
         mainResponsesCount: mainResponses.length,
         threadResponsesCount: threadResponses.length,
-        dataSizeKB: Math.round(JSON.stringify(learningData).length / 1024)
+        snippetsCount: selectedSnippets.length,
+        dataSizeKB: Math.round(JSON.stringify(learningData).length / 1024),
+        selections
       });
 
       // Show loading state
@@ -211,7 +256,7 @@ function HomeContent() {
         <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
                     background: rgba(0,0,0,0.9); color: white; padding: 20px; border-radius: 10px; 
                     z-index: 10000; text-align: center;">
-          <div style="font-size: 18px; margin-bottom: 10px;">🧠 Analyzing DeepDive with Grok 4...</div>
+          <div style="font-size: 18px; margin-bottom: 10px;">🧠 Analyzing Selected Content with Grok 4...</div>
           <div style="font-size: 14px; color: #888;">Creating intelligent learning tools</div>
         </div>
       `;
@@ -241,7 +286,8 @@ function HomeContent() {
             ...analysisResult.metadata,
             generated_at: new Date().toISOString(),
             user_id: user.uid,
-            deepdive_id: deepDiveId // Store the DeepDive ID for navigation back
+            deepdive_id: deepDiveId,
+            selections: selections // Store what was selected for reference
           }
         };
 
@@ -277,10 +323,12 @@ function HomeContent() {
             user_id: user.uid,
             main_responses_count: mainResponses.length,
             thread_responses_count: threadResponses.length,
+            snippets_count: selectedSnippets.length,
             model: 'grok-fallback',
             analysis_failed: true,
             error: analysisError instanceof Error ? analysisError.message : 'Unknown error',
-            deepdive_id: deepDiveId // Store the DeepDive ID for navigation back
+            deepdive_id: deepDiveId,
+            selections: selections
           }
         };
         
@@ -357,9 +405,11 @@ function HomeContent() {
         mainMessages: chatState.mainMessages || [],
         threads: chatState.threads || [],
         selectedModel: chatState.selectedModel || 'anthropic',
+        learningSnippets: chatState.learningSnippets || [], // Include learning snippets
         metadata: {
           totalMessages: (chatState.mainMessages || []).length,
           totalThreads: (chatState.threads || []).length,
+          totalSnippets: (chatState.learningSnippets || []).length,
           lastActiveThread: chatState.activeThreadId,
         },
       };
@@ -384,7 +434,7 @@ function HomeContent() {
         console.log('💾 Saving new deep dive...');
         deepDiveId = await saveDeepDive(deepDiveData);
         setCurrentDeepDiveId(deepDiveId);
-        alert(`✅ Deep dive saved successfully!\n\n📊 Saved:\n• ${deepDiveData.mainMessages.length} main messages\n• ${deepDiveData.threads.length} threads\n• Model: ${deepDiveData.selectedModel}`);
+        alert(`✅ Deep dive saved successfully!\n\n📊 Saved:\n• ${deepDiveData.mainMessages.length} main messages\n• ${deepDiveData.threads.length} threads\n• ${deepDiveData.learningSnippets?.length || 0} snippets\n• Model: ${deepDiveData.selectedModel}`);
       }
 
       // Refresh the saved deep dives list
@@ -421,7 +471,11 @@ function HomeContent() {
 
   const handleLoadDeepDive = async (deepDive: DeepDiveData) => {
     try {
-      console.log('🔄 Loading deep dive:', deepDive.title);
+      console.log('🔄 Loading deep dive:', deepDive.title, {
+        mainMessages: deepDive.mainMessages?.length || 0,
+        threads: deepDive.threads?.length || 0,
+        snippets: deepDive.learningSnippets?.length || 0,
+      });
       if (threadedChatRef.current) {
         // Load the deep dive data into ThreadedChat
         threadedChatRef.current.loadState({
@@ -429,6 +483,7 @@ function HomeContent() {
           threads: deepDive.threads || [],
           selectedModel: deepDive.selectedModel || 'anthropic',
           activeThreadId: deepDive.metadata?.lastActiveThread || null,
+          learningSnippets: deepDive.learningSnippets || [],
         });
         
         setCurrentDeepDiveId(deepDive.id || null);
@@ -438,7 +493,7 @@ function HomeContent() {
         setSaveTitle(deepDive.title);
         setSaveDescription(deepDive.description || '');
         
-        alert(`✅ Loaded deep dive: "${deepDive.title}"\n\n📊 Loaded:\n• ${deepDive.mainMessages?.length || 0} main messages\n• ${deepDive.threads?.length || 0} threads\n\n💡 Note: Main chat messages may not appear immediately due to technical limitations. Threads should load correctly.`);
+        alert(`✅ Loaded deep dive: "${deepDive.title}"\n\n📊 Loaded:\n• ${deepDive.mainMessages?.length || 0} main messages\n• ${deepDive.threads?.length || 0} threads\n• ${deepDive.learningSnippets?.length || 0} snippets\n\n💡 Note: Main chat messages may not appear immediately due to technical limitations. Threads should load correctly.`);
       }
     } catch (error) {
       console.error('❌ Failed to load deep dive:', error);
@@ -462,6 +517,21 @@ function HomeContent() {
       } catch (error) {
         console.error('Failed to delete deep dive:', error);
         alert('Failed to delete deep dive. Please try again.');
+      }
+    }
+  };
+
+  // Save handler for Learning Content Selector modal
+  const handleSaveFromModal = () => {
+    // Close the content selector modal first
+    setShowContentSelector(false);
+    
+    // Open the save dialog with current state
+    if (currentChatState) {
+      setShowSaveDialog(true);
+      // If no title is set, suggest a default
+      if (!saveTitle) {
+        setSaveTitle(`DeepDive Session - ${new Date().toLocaleDateString()}`);
       }
     }
   };
@@ -556,7 +626,7 @@ function HomeContent() {
                   
                   <button
                     onClick={handleGenerateLearningTools}
-                    className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 border border-purple-500 hover:border-purple-400 flex items-center gap-2"
+                    className="bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 border border-slate-600 hover:border-slate-500 flex items-center gap-2"
                     title="Generate interactive learning tools (flashcards, slides, infographics)"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -694,6 +764,7 @@ function HomeContent() {
                           <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
                             <span>📝 {deepDive.metadata?.totalMessages || 0} messages</span>
                             <span>🧵 {deepDive.metadata?.totalThreads || 0} threads</span>
+                            <span>📚 {deepDive.metadata?.totalSnippets || 0} snippets</span>
                             <span>🕒 {formatDate(deepDive.updatedAt)}</span>
                             <span>🤖 {deepDive.selectedModel}</span>
                           </div>
@@ -748,6 +819,15 @@ function HomeContent() {
           </div>
         </div>
       )}
+
+      {/* Learning Content Selector Modal */}
+      <LearningContentSelector
+        isOpen={showContentSelector}
+        onClose={() => setShowContentSelector(false)}
+        onGenerate={handleGenerateWithSelections}
+        onSave={handleSaveFromModal}
+        chatState={currentChatState}
+      />
     </>
   );
 }
