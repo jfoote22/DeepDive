@@ -327,13 +327,59 @@ export interface LearningData {
 
 export interface LearningDataDoc {
   id?: string;
-  learningData: LearningData;
+  learningData: LearningData | EnhancedLearningData;
   userId: string;
   createdAt: Timestamp;
   expiresAt: Timestamp; // Auto-delete after 24 hours
 }
 
-export const saveLearningData = async (learningData: LearningData) => {
+export interface EnhancedLearningData {
+  originalData: LearningData;
+  analysis: GrokAnalysis | null;
+  metadata: {
+    generated_at: string;
+    user_id: string;
+    analyzed_at?: string;
+    main_responses_count: number;
+    thread_responses_count: number;
+    model: string;
+    analysis_failed?: boolean;
+    error?: string;
+  };
+}
+
+export interface GrokAnalysis {
+  summary: string;
+  learningObjectives: string[];
+  keyTopics: string[];
+  flashcards: Array<{
+    question: string;
+    answer: string;
+    category: string;
+    difficulty: 'beginner' | 'intermediate' | 'advanced';
+  }>;
+  quizQuestions: Array<{
+    question: string;
+    options?: string[];
+    correctAnswer: string;
+    explanation: string;
+    type: 'multiple_choice' | 'short_answer' | 'true_false';
+  }>;
+  studyGuide: {
+    mainConcepts: string[];
+    processes: string[];
+    keyInsights: string[];
+    practicalApplications: string[];
+  };
+  reviewSessions: Array<{
+    title: string;
+    content: string;
+    timeEstimate: string;
+    difficulty: 'beginner' | 'intermediate' | 'advanced';
+  }>;
+}
+
+export const saveLearningData = async (learningData: LearningData | EnhancedLearningData) => {
   console.log('🎓 Saving learning data to Firebase...');
   
   if (!auth.currentUser) {
@@ -353,17 +399,36 @@ export const saveLearningData = async (learningData: LearningData) => {
       expiresAt: Timestamp.fromDate(expiresAt),
     };
 
-    console.log('💾 Saving learning data:', {
-      mainResponsesCount: learningData.mainResponses.length,
-      threadResponsesCount: learningData.threadResponses.length,
-      dataSizeKB: Math.round(JSON.stringify(learningData).length / 1024),
-      expiresAt: expiresAt.toISOString(),
-      userId: auth.currentUser.uid
-    });
+    // Check if this is enhanced learning data or legacy format
+    const isEnhanced = 'originalData' in learningData;
+    
+    if (isEnhanced) {
+      const enhanced = learningData as EnhancedLearningData;
+      console.log('💾 Saving enhanced learning data with Grok analysis:', {
+        mainResponsesCount: enhanced.originalData.mainResponses.length,
+        threadResponsesCount: enhanced.originalData.threadResponses.length,
+        hasAnalysis: !!enhanced.analysis,
+        flashcardsCount: enhanced.analysis?.flashcards?.length || 0,
+        quizQuestionsCount: enhanced.analysis?.quizQuestions?.length || 0,
+        dataSizeKB: Math.round(JSON.stringify(learningData).length / 1024),
+        expiresAt: expiresAt.toISOString(),
+        userId: auth.currentUser.uid
+      });
+    } else {
+      const legacy = learningData as LearningData;
+      console.log('💾 Saving legacy learning data:', {
+        mainResponsesCount: legacy.mainResponses.length,
+        threadResponsesCount: legacy.threadResponses.length,
+        dataSizeKB: Math.round(JSON.stringify(learningData).length / 1024),
+        expiresAt: expiresAt.toISOString(),
+        userId: auth.currentUser.uid
+      });
+    }
 
     // TEMPORARY: Use deepdives collection to test if it's a collection-specific issue
     const docRef = await addDoc(collection(db, 'deepdives'), {
       type: 'learning_data', // Mark this as learning data
+      enhanced: isEnhanced, // Flag to indicate if this has Grok analysis
       ...learningDataDoc
     });
     console.log('✅ Learning data saved successfully with ID:', docRef.id);
@@ -399,7 +464,7 @@ export const getLearningData = async (learningDataId: string) => {
       throw new Error('Document is not learning data');
     }
 
-    const learningDataDoc = data as LearningDataDoc & { type: string };
+    const learningDataDoc = data as LearningDataDoc & { type: string; enhanced?: boolean };
     
     // Check if user owns this data
     if (learningDataDoc.userId !== auth.currentUser.uid) {
@@ -413,7 +478,14 @@ export const getLearningData = async (learningDataId: string) => {
       throw new Error('Learning data has expired and has been deleted');
     }
 
-    console.log('✅ Learning data loaded successfully');
+    const isEnhanced = data.enhanced === true;
+    
+    if (isEnhanced) {
+      console.log('✅ Enhanced learning data loaded successfully with Grok analysis');
+    } else {
+      console.log('✅ Legacy learning data loaded successfully');
+    }
+    
     return learningDataDoc.learningData;
 
   } catch (error) {

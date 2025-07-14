@@ -134,11 +134,89 @@ export default function Home() {
         dataSizeKB: Math.round(JSON.stringify(learningData).length / 1024)
       });
 
-      // Save to Firebase
-      const learningDataId = await saveLearningData(learningData);
-      
-      // Navigate to learning page with Firebase ID
-      window.open(`/learn?id=${learningDataId}`, '_blank');
+      // Show loading state
+      const loadingAlert = document.createElement('div');
+      loadingAlert.innerHTML = `
+        <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                    background: rgba(0,0,0,0.9); color: white; padding: 20px; border-radius: 10px; 
+                    z-index: 10000; text-align: center;">
+          <div style="font-size: 18px; margin-bottom: 10px;">🧠 Analyzing DeepDive with Grok 4...</div>
+          <div style="font-size: 14px; color: #888;">Creating intelligent learning tools</div>
+        </div>
+      `;
+      document.body.appendChild(loadingAlert);
+
+      try {
+        // Call Grok analysis API
+        const analysisResponse = await fetch('/api/grok/analyze-learning', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ learningData }),
+        });
+
+        const analysisResult = await analysisResponse.json();
+        
+        if (!analysisResult.success) {
+          throw new Error(analysisResult.error || 'Failed to analyze learning content');
+        }
+
+        // Combine original data with analysis
+        const enhancedLearningData = {
+          originalData: learningData,
+          analysis: analysisResult.analysis,
+          metadata: {
+            ...analysisResult.metadata,
+            generated_at: new Date().toISOString(),
+            user_id: user.uid
+          }
+        };
+
+        console.log('🎓 Enhanced learning data with Grok analysis:', {
+          originalDataSizeKB: Math.round(JSON.stringify(learningData).length / 1024),
+          analysisDataSizeKB: Math.round(JSON.stringify(analysisResult.analysis).length / 1024),
+          flashcardsCount: analysisResult.analysis.flashcards?.length || 0,
+          quizQuestionsCount: analysisResult.analysis.quizQuestions?.length || 0
+        });
+
+        // Save enhanced data to Firebase
+        const learningDataId = await saveLearningData(enhancedLearningData);
+        
+        // Remove loading state
+        document.body.removeChild(loadingAlert);
+        
+        // Navigate to learning page with Firebase ID (same tab to avoid popup blocking)
+        window.location.href = `/learn?id=${learningDataId}`;
+
+      } catch (analysisError) {
+        // Remove loading state
+        document.body.removeChild(loadingAlert);
+        
+        console.error('❌ Failed to analyze learning content:', analysisError);
+        
+        // Fallback: save without analysis
+        const fallbackData = {
+          originalData: learningData,
+          analysis: null,
+          metadata: {
+            generated_at: new Date().toISOString(),
+            user_id: user.uid,
+            main_responses_count: mainResponses.length,
+            thread_responses_count: threadResponses.length,
+            model: 'grok-fallback',
+            analysis_failed: true,
+            error: analysisError instanceof Error ? analysisError.message : 'Unknown error'
+          }
+        };
+        
+        const learningDataId = await saveLearningData(fallbackData);
+        
+        alert(`⚠️ Analysis failed, but basic learning tools were created.\n\nError: ${analysisError instanceof Error ? analysisError.message : 'Unknown error'}\n\nYou can still view the learning tools with basic functionality.`);
+        
+        // Navigate to learning page with Firebase ID (same tab to avoid popup blocking)
+        window.location.href = `/learn?id=${learningDataId}`;
+      }
 
     } catch (error) {
       console.error('❌ Failed to generate learning tools:', error);
