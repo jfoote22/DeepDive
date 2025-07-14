@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import { User } from 'firebase/auth';
+import { useAuth } from '../../lib/hooks/useAuth';
 
 interface LearningData {
   mainResponses: Array<{ content: string; index: number; }>;
@@ -70,11 +71,15 @@ function LearnPageContent() {
   const [selectedAnswer, setSelectedAnswer] = useState<string>('');
   
   // Authentication state
-  const [authLoading, setAuthLoading] = useState(true);
+  const { user, loading: authLoading } = useAuth();
   const [authError, setAuthError] = useState<string | null>(null);
   
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  // Extract learning data ID and deepdive ID from URL parameters
+  const learningDataId = searchParams.get('id');
+  const deepdiveId = searchParams.get('deepdive');
 
   // Helper function to normalize learning data
   const getNormalizedLearningData = (data: LearningData | EnhancedLearningData | null): LearningData | null => {
@@ -115,38 +120,16 @@ function LearnPageContent() {
     }
   }, [viewMode]);
 
-  // Monitor authentication state
+  // Monitor authentication state using useAuth hook
   useEffect(() => {
-    const monitorAuth = async () => {
-      try {
-        const { auth } = await import('../../lib/firebase/firebase');
-        
-        if (!auth) {
-          console.warn('Firebase auth not configured');
-          setAuthLoading(false);
-          return;
-        }
-
-        const unsubscribe = auth.onAuthStateChanged((user: User | null) => {
-          console.log('🔐 Auth state changed:', user ? 'User authenticated' : 'No user');
-          setAuthLoading(false);
-          
-          if (!user) {
-            setAuthError('Authentication required to load learning data');
-          } else {
-            setAuthError(null);
-          }
-        });
-
-        return () => unsubscribe();
-      } catch (error) {
-        console.error('Failed to monitor auth state:', error);
-        setAuthLoading(false);
+    if (!authLoading) {
+      if (!user) {
+        setAuthError('Authentication required to load learning data');
+      } else {
+        setAuthError(null);
       }
-    };
-
-    monitorAuth();
-  }, []);
+    }
+  }, [user, authLoading]);
 
   // Load learning data after authentication is ready
   useEffect(() => {
@@ -235,10 +218,16 @@ function LearnPageContent() {
           <p className="text-gray-400 mb-4">{authError}</p>
           <div className="space-x-4">
             <button
-              onClick={() => router.push('/')}
+              onClick={() => {
+                if (deepdiveId) {
+                  router.push(`/?load=${deepdiveId}`);
+                } else {
+                  router.push('/');
+                }
+              }}
               className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"
             >
-              Go to Home & Sign In
+              {deepdiveId ? 'Return to DeepDive Session' : 'Go to Home & Sign In'}
             </button>
             <button
               onClick={() => router.back()}
@@ -304,10 +293,16 @@ function LearnPageContent() {
           </div>
           <div className="space-y-3">
             <button
-              onClick={() => router.push('/')}
+              onClick={() => {
+                if (deepdiveId) {
+                  router.push(`/?load=${deepdiveId}`);
+                } else {
+                  router.push('/');
+                }
+              }}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"
             >
-              Create New Learning Content
+              {deepdiveId ? 'Return to DeepDive Session' : 'Create New Learning Content'}
             </button>
             <button
               onClick={() => router.back()}
@@ -641,18 +636,46 @@ function LearnPageContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800">
       {/* Header */}
-      <header className="bg-slate-900/80 backdrop-blur-sm border-b border-slate-700/50 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <header className="bg-slate-800 border-b border-slate-700">
+        <div className="max-w-6xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => {
+                  if (deepdiveId) {
+                    router.push(`/?load=${deepdiveId}`);
+                  } else {
+                    router.push('/');
+                  }
+                }}
+                className="text-blue-400 hover:text-blue-300 flex items-center gap-2"
+              >
+                ← {deepdiveId ? 'Return to DeepDive' : 'Back to Home'}
+              </button>
+              <div>
+                <h1 className="text-xl font-bold text-white">AI Learning Hub</h1>
+                <p className="text-gray-400 text-sm">Enhanced by Grok 4 Analysis</p>
+              </div>
+            </div>
             <button
-              onClick={() => router.back()}
-              className="text-gray-400 hover:text-white transition-colors"
+              onClick={() => {
+                if (deepdiveId) {
+                  router.push(`/?load=${deepdiveId}`);
+                } else {
+                  router.back();
+                }
+              }}
+              className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm"
             >
-              ← Back to Chat
+              {deepdiveId ? 'Continue DeepDive' : 'Go Back'}
             </button>
-            <h1 className="text-2xl font-bold text-white">🎓 AI Learning Hub</h1>
           </div>
-          
+        </div>
+      </header>
+
+      {/* Navigation Toolbar */}
+      <div className="bg-slate-800/50 border-b border-slate-700/50">
+        <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setViewMode('ai-flashcards')}
@@ -686,7 +709,7 @@ function LearnPageContent() {
             </button>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Main Content */}
       <main className="py-6">

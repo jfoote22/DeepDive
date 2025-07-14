@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState, useContext, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import ThreadedChat from "../components/ThreadedChat";
 import FirebaseTest from "../components/FirebaseTest";
 import { AuthContext } from '../lib/contexts/AuthContext';
@@ -10,6 +11,7 @@ import Image from 'next/image';
 export default function Home() {
   const threadedChatRef = useRef<any>(null);
   const { user, loading, signInWithGoogle, signOut } = useContext(AuthContext);
+  const searchParams = useSearchParams();
   const [savedDeepDives, setSavedDeepDives] = useState<DeepDiveData[]>([]);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showLoadDialog, setShowLoadDialog] = useState(false);
@@ -29,6 +31,24 @@ export default function Home() {
       setCurrentDeepDiveId(null);
     }
   }, [user]);
+
+  // Auto-load DeepDive if load parameter is present (for navigation back from learning tools)
+  useEffect(() => {
+    const loadParam = searchParams.get('load');
+    if (loadParam && user && savedDeepDives.length > 0) {
+      console.log('🔄 Auto-loading DeepDive from URL parameter:', loadParam);
+      const deepDiveToLoad = savedDeepDives.find(dd => dd.id === loadParam);
+      if (deepDiveToLoad) {
+        handleLoadDeepDive(deepDiveToLoad);
+        // Clean up the URL parameter after loading
+        const url = new URL(window.location.href);
+        url.searchParams.delete('load');
+        window.history.replaceState({}, '', url.toString());
+      } else {
+        console.warn('DeepDive not found for auto-loading:', loadParam);
+      }
+    }
+  }, [searchParams, user, savedDeepDives]);
 
   const loadUserDeepDives = async () => {
     try {
@@ -97,6 +117,42 @@ export default function Home() {
         return;
       }
 
+      // Auto-save the DeepDive if it's not saved yet
+      let deepDiveId = currentDeepDiveId;
+      if (!currentDeepDiveId) {
+        try {
+          console.log('💾 Auto-saving DeepDive before generating learning tools...');
+          
+          // Generate a default title based on current timestamp or first message
+          const defaultTitle = `DeepDive Session - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`;
+          
+          const deepDiveData = {
+            title: defaultTitle,
+            description: 'Auto-saved before generating learning tools',
+            mainMessages: chatState.mainMessages || [],
+            threads: chatState.threads || [],
+            selectedModel: chatState.selectedModel || 'anthropic',
+            metadata: {
+              totalMessages: (chatState.mainMessages || []).length,
+              totalThreads: (chatState.threads || []).length,
+              lastActiveThread: chatState.activeThreadId,
+            },
+          };
+
+          deepDiveId = await saveDeepDive(deepDiveData);
+          setCurrentDeepDiveId(deepDiveId);
+          
+          // Refresh the saved deep dives list
+          await loadUserDeepDives();
+          
+          console.log('✅ Auto-saved DeepDive successfully with ID:', deepDiveId);
+        } catch (saveError) {
+          console.error('❌ Failed to auto-save DeepDive:', saveError);
+          alert(`❌ Failed to save DeepDive before generating learning tools.\n\nError: ${saveError instanceof Error ? saveError.message : 'Unknown error'}\n\nPlease try manually saving first.`);
+          return;
+        }
+      }
+
       // Extract AI responses from main chat
       const mainResponses = (chatState.mainMessages || [])
         .filter((msg: any) => msg.role === 'assistant')
@@ -129,6 +185,7 @@ export default function Home() {
       };
 
       console.log('🎓 Generated learning data:', {
+        deepDiveId,
         mainResponsesCount: mainResponses.length,
         threadResponsesCount: threadResponses.length,
         dataSizeKB: Math.round(JSON.stringify(learningData).length / 1024)
@@ -169,7 +226,8 @@ export default function Home() {
           metadata: {
             ...analysisResult.metadata,
             generated_at: new Date().toISOString(),
-            user_id: user.uid
+            user_id: user.uid,
+            deepdive_id: deepDiveId // Store the DeepDive ID for navigation back
           }
         };
 
@@ -177,7 +235,8 @@ export default function Home() {
           originalDataSizeKB: Math.round(JSON.stringify(learningData).length / 1024),
           analysisDataSizeKB: Math.round(JSON.stringify(analysisResult.analysis).length / 1024),
           flashcardsCount: analysisResult.analysis.flashcards?.length || 0,
-          quizQuestionsCount: analysisResult.analysis.quizQuestions?.length || 0
+          quizQuestionsCount: analysisResult.analysis.quizQuestions?.length || 0,
+          deepDiveId
         });
 
         // Save enhanced data to Firebase
@@ -186,8 +245,8 @@ export default function Home() {
         // Remove loading state
         document.body.removeChild(loadingAlert);
         
-        // Navigate to learning page with Firebase ID (same tab to avoid popup blocking)
-        window.location.href = `/learn?id=${learningDataId}`;
+        // Navigate to learning page with Firebase ID and DeepDive ID for navigation back
+        window.location.href = `/learn?id=${learningDataId}&deepdive=${deepDiveId}`;
 
       } catch (analysisError) {
         // Remove loading state
@@ -206,7 +265,8 @@ export default function Home() {
             thread_responses_count: threadResponses.length,
             model: 'grok-fallback',
             analysis_failed: true,
-            error: analysisError instanceof Error ? analysisError.message : 'Unknown error'
+            error: analysisError instanceof Error ? analysisError.message : 'Unknown error',
+            deepdive_id: deepDiveId // Store the DeepDive ID for navigation back
           }
         };
         
@@ -214,8 +274,8 @@ export default function Home() {
         
         alert(`⚠️ Analysis failed, but basic learning tools were created.\n\nError: ${analysisError instanceof Error ? analysisError.message : 'Unknown error'}\n\nYou can still view the learning tools with basic functionality.`);
         
-        // Navigate to learning page with Firebase ID (same tab to avoid popup blocking)
-        window.location.href = `/learn?id=${learningDataId}`;
+        // Navigate to learning page with Firebase ID and DeepDive ID for navigation back
+        window.location.href = `/learn?id=${learningDataId}&deepdive=${deepDiveId}`;
       }
 
     } catch (error) {
