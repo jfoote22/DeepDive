@@ -120,6 +120,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
   const [threadHeaderColorsEnabled, setThreadHeaderColorsEnabled] = useState<boolean>(true);
   // Global context visibility toggle state
   const [showAllContexts, setShowAllContexts] = useState<boolean>(true);
+  // Split screen mode state
+  const [isSplitScreenMode, setIsSplitScreenMode] = useState<boolean>(false);
   
   // Mobile selection state
   const [mobileSelection, setMobileSelection] = useState<MobileSelection>({
@@ -1081,9 +1083,28 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
 
     return (
       <div className="w-full space-y-2">
-        {/* Reasoning Toggle */}
+        {/* Grok Settings */}
         {selectedModel === 'grok' && (
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            {/* Response Mode Buttons */}
+            <div className="flex gap-2 flex-wrap">
+              {['normal', 'fun', 'creative', 'precise'].map(mode => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setGrokMode(mode as 'normal' | 'fun' | 'creative' | 'precise')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 border ${
+                    grokMode === mode
+                      ? 'bg-accent-blue/20 text-accent-blue border-accent-blue/50'
+                      : 'bg-card/40 text-muted hover:bg-hover hover:text-white border-custom'
+                  }`}
+                >
+                  {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                </button>
+              ))}
+            </div>
+            
+            {/* Think Mode Toggle */}
             <button
               type="button"
               onClick={() => setShowReasoning(!showReasoning)}
@@ -1693,6 +1714,11 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
       return { mainWidth: 'w-full', threadWidth: 'w-0', mainWidthPercent: 100, threadWidthPercent: 0 };
     }
 
+    // Split screen mode: equal 50/50 split
+    if (isSplitScreenMode) {
+      return { mainWidth: 'w-1/2', threadWidth: 'w-1/2', mainWidthPercent: 50, threadWidthPercent: 50 };
+    }
+
     // If user has manually resized, use that width (unless thread is expanded)
     if (manualMainWidth !== null && !expandedThread) {
       const mainPercent = Math.round(manualMainWidth);
@@ -1882,7 +1908,7 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
 
   // Resizer component
   const Resizer = () => {
-    if (!hasActiveThreads) return null;
+    if (!hasActiveThreads || isSplitScreenMode) return null;
     
     return (
       <div
@@ -1950,17 +1976,30 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
               {hasActiveThreads && (
                 <div className="flex items-center justify-end gap-2 mb-4">
                   <button
-                    onClick={() => toggleThreadExpansion('main')}
+                    onClick={() => setIsSplitScreenMode(!isSplitScreenMode)}
                     className={`p-2 rounded-lg hover:bg-hover transition-colors ${
-                      expandedThread === 'main' ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
+                      isSplitScreenMode ? 'bg-accent-green/20 text-accent-green' : 'text-gray-400 hover:text-white'
                     }`}
-                    title={expandedThread === 'main' ? 'Collapse main chat' : 'Expand main chat'}
+                    title={isSplitScreenMode ? 'Exit split screen mode' : 'Enter split screen mode (50/50)'}
                   >
-                    <span className="text-xl font-bold">
-                      {expandedThread === 'main' ? '←' : '→'}
-                    </span>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 4v16m6-16v16M4 12h16" />
+                    </svg>
                   </button>
-                  {manualMainWidth !== null && (
+                  {!isSplitScreenMode && (
+                    <button
+                      onClick={() => toggleThreadExpansion('main')}
+                      className={`p-2 rounded-lg hover:bg-hover transition-colors ${
+                        expandedThread === 'main' ? 'bg-accent-blue/20 text-accent-blue' : 'text-gray-400 hover:text-white'
+                      }`}
+                      title={expandedThread === 'main' ? 'Collapse main chat' : 'Expand main chat'}
+                    >
+                      <span className="text-xl font-bold">
+                        {expandedThread === 'main' ? '←' : '→'}
+                      </span>
+                    </button>
+                  )}
+                  {!isSplitScreenMode && manualMainWidth !== null && (
                     <button
                       onClick={() => setManualMainWidth(null)}
                       className="p-1 text-xs bg-accent-orange/20 text-accent-orange hover:bg-accent-orange/30 rounded-lg transition-colors"
@@ -1977,33 +2016,8 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
                 <h1 className="text-5xl font-bold text-white tracking-wide">DeepDive</h1>
               </div>
               
-              <ModelSelector />
-              {selectedModel === 'grok' && (
-                <details className="mt-4 bg-card/40 p-3 rounded-lg border border-custom">
-                  <summary className="cursor-pointer text-white font-medium flex items-center gap-2">
-                    <span>Grok Response Settings</span>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </summary>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {['normal', 'fun', 'creative', 'precise'].map(mode => (
-                      <button
-                        key={mode}
-                        onClick={() => setGrokMode(mode as 'normal' | 'fun' | 'creative' | 'precise')}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 border ${
-                          grokMode === mode
-                            ? 'bg-accent-blue/20 text-accent-blue border-accent-blue/50'
-                            : 'bg-card/60 text-muted hover:bg-hover hover:text-white border-custom'
-                        }`}
-                      >
-                        {mode.charAt(0).toUpperCase() + mode.slice(1)} Mode
-                      </button>
-                    ))}
-                  </div>
-                </details>
-              )}
-              {hasActiveThreads && (
+                              <ModelSelector />
+                {hasActiveThreads && (
                 <div className="mt-2 text-sm text-muted">
                   💡 Select text in any AI response to create contextual threads - drill deeper into topics!
                 </div>
@@ -2134,6 +2148,21 @@ const ThreadedChat = forwardRef<any, {}>((props, ref) => {
             {/* Thread Rows Container */}
             <div className="flex-1 overflow-hidden p-2">
               <div className="h-full flex flex-col gap-2">
+                {/* Expand All Button */}
+                {threadRows.length > 0 && (
+                  <div className="flex justify-end mb-2">
+                    <button
+                      onClick={expandAllRows}
+                      className="px-3 py-1 text-sm bg-accent-blue/20 text-accent-blue hover:bg-accent-blue/30 rounded-lg transition-colors duration-200 flex items-center gap-1"
+                      title="Expand all thread rows"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 3v10a2 2 0 002 2h8a2 2 0 002-2V7M9 7h6" />
+                      </svg>
+                      Expand All
+                    </button>
+                  </div>
+                )}
                 {threadRows
                   .map((rowThreads, originalRowIndex) => ({ rowThreads, originalRowIndex }))
                   .filter(({ rowThreads, originalRowIndex }) => {
